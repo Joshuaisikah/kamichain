@@ -3,6 +3,11 @@
 Work through this in order. Each step has a test command — run it before moving on.
 The tests in `tests/` are the spec. They won't compile until you define the types they import.
 
+**Global rules that apply everywhere:**
+- Every public struct and enum must derive `#[derive(Debug, Clone, Serialize, Deserialize)]` so that storage, RPC, and P2P serialization work without extra boilerplate.
+- All structs with public fields should also derive `PartialEq` where tests compare them.
+- `kamichain-core/src/lib.rs` already contains `pub use` re-exports — you do **not** need to add them; they let tests import `kamichain_core::{Block, Chain, Transaction, …}` directly.
+
 ---
 
 ## Step 1 — `kamichain-core/src/error.rs`
@@ -300,14 +305,18 @@ cargo test -p kamichain-node --test e2e_tests
 
 Define:
 ```rust
-pub struct RpcServer { addr: String, state: SharedState, mempool: Arc<Mutex<Mempool>> }
+pub struct RpcServer {
+    listener: std::net::TcpListener,  // bound in new(), converted in run()
+    state: SharedState,
+    mempool: Arc<Mutex<Mempool>>,
+}
 pub struct RpcRequest  { pub method: String, pub params: Option<serde_json::Value> }
 pub struct RpcResponse { pub ok: bool, pub result: Option<serde_json::Value>, pub error: Option<String> }
 ```
 
-`new(addr, state, mempool)` — bind `TcpListener` at `addr` (use port 0 in tests for OS-assigned port)  
-`local_port()` — return the actual bound port (needed for tests)  
-`run(self)` — `loop { accept connection, tokio::spawn(handle(conn, state, mempool)) }`  
+`new(addr, state, mempool)` — **synchronous**: bind with `std::net::TcpListener::bind(addr)`, call `set_nonblocking(true)`, store it in the struct. Tests call `new` without `.await`.  
+`local_port()` — `self.listener.local_addr().unwrap().port()`  
+`run(self) -> anyhow::Result<()>` — convert to tokio: `tokio::net::TcpListener::from_std(self.listener)?`, then `loop { accept, tokio::spawn(handle(…)) }`  
 
 `handle` reads one line of JSON, dispatches on `method`, writes one response line:
 - `chain_info` → `{ height, latest_hash, difficulty }`
@@ -327,25 +336,38 @@ cargo test -p kamichain-node --test rpc_tests
 
 Define:
 ```rust
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Message {
-    NewBlock { block: Block },
+    NewBlock(Block),
     GetChain,
-    Chain { blocks: Vec<Block> },
-    NewTx { tx: Transaction },
+    Chain(Vec<Block>),
+    NewTx(Transaction),
     GetPeers,
-    Peers { addrs: Vec<String> },
+    Peers(Vec<String>),
 }
 
-pub struct P2PLayer { pub listen_addr: String, peers: Arc<Mutex<Vec<String>>>, state: SharedState, mempool: Arc<Mutex<Mempool>> }
+pub struct P2PLayer {
+    listener: std::net::TcpListener,  // bound in new(), converted in listen()
+    peers: Arc<Mutex<Vec<String>>>,
+    state: SharedState,
+    mempool: Arc<Mutex<Mempool>>,
+}
 ```
 
-`new(addr, state, mempool)` — bind listener on addr  
-`listen_addr()` — return the actual bound address including port  
-`peers()` — return snapshot of peer list  
-`listen()` — accept loop, spawn handler per connection  
-`connect(peer_addr)` — open TCP connection, add to peer list, spawn handler  
+The `content = "data"` attribute means the JSON wire format uses a generic `"data"` key for the payload:
+```json
+{ "type": "new_block", "data": { "index": 5, "hash": "...", ... } }
+{ "type": "get_chain" }
+{ "type": "chain",    "data": [ { "index": 0, ... }, ... ] }
+```
+Unit variants (`GetChain`, `GetPeers`) serialize with no content field.
+
+`new(addr, state, mempool)` — **synchronous**: bind with `std::net::TcpListener::bind(addr)`, call `set_nonblocking(true)`. Tests call `new` without `.await`.  
+`listen_addr() -> String` — `self.listener.local_addr().unwrap().to_string()`  
+`peers() -> Vec<String>` — return a clone of the peer list snapshot  
+`listen() -> anyhow::Result<()>` — convert via `tokio::net::TcpListener::from_std`, accept loop, spawn handler per connection  
+`connect(peer_addr) -> anyhow::Result<()>` — open TCP connection, add to peer list, spawn handler  
 `broadcast_block(block)` — send `Message::NewBlock` to all peers  
 `broadcast_tx(tx)` — send `Message::NewTx` to all peers  
 `sync_with_peer(addr)` — connect, send `GetChain`, receive `Chain`, call `state.chain.replace`

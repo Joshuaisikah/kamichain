@@ -4,13 +4,13 @@
 /// gossip protocol: block broadcast, chain sync, peer exchange.
 ///
 /// Protocol: newline-delimited JSON over TCP.
-/// Message types:
-///   { "type": "new_block",  "block": <Block JSON>  }
+/// Message types (adjacently-tagged: "type" + "data"):
+///   { "type": "new_block",  "data": <Block JSON>   }
 ///   { "type": "get_chain"                          }
-///   { "type": "chain",      "blocks": [...]        }
-///   { "type": "new_tx",     "tx": <Tx JSON>        }
+///   { "type": "chain",      "data": [...]          }
+///   { "type": "new_tx",     "data": <Tx JSON>      }
 ///   { "type": "get_peers"                          }
-///   { "type": "peers",      "addrs": [...]         }
+///   { "type": "peers",      "data": [...]          }
 
 use kamichain_core::{Block, Transaction};
 use kamichain_node::mempool::Mempool;

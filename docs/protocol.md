@@ -98,11 +98,13 @@ Peers communicate over persistent TCP connections. Messages are newline-terminat
 
 ### Message types
 
+Messages use adjacently-tagged JSON: a `"type"` discriminant field plus a `"data"` field containing the payload. Unit messages (no payload) omit `"data"`.
+
 #### `new_block`
 Broadcast when a node mines a new block. Recipients validate and add it to their chain.
 
 ```json
-{ "type": "new_block", "block": { "index": 10, "hash": "...", ... } }
+{ "type": "new_block", "data": { "index": 10, "hash": "...", "nonce": 84231, ... } }
 ```
 
 #### `get_chain`
@@ -116,14 +118,14 @@ Request the full chain from a peer (used during initial sync or after a fork is 
 Response to `get_chain`. Contains the sender's full block list.
 
 ```json
-{ "type": "chain", "blocks": [ { "index": 0, ... }, { "index": 1, ... }, ... ] }
+{ "type": "chain", "data": [ { "index": 0, ... }, { "index": 1, ... }, ... ] }
 ```
 
 #### `new_tx`
 Broadcast a new unconfirmed transaction to all peers.
 
 ```json
-{ "type": "new_tx", "tx": { "id": "...", "sender": "...", "recipient": "...", "amount": 5, "signature": "..." } }
+{ "type": "new_tx", "data": { "id": "...", "sender": "...", "recipient": "...", "amount": 5, "signature": "..." } }
 ```
 
 #### `get_peers`
@@ -137,7 +139,7 @@ Request the peer list from a connected node (peer exchange).
 Response to `get_peers`.
 
 ```json
-{ "type": "peers", "addrs": ["192.168.1.3:8332", "10.0.0.9:8332"] }
+{ "type": "peers", "data": ["192.168.1.3:8332", "10.0.0.9:8332"] }
 ```
 
 ---

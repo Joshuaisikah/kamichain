@@ -49,11 +49,10 @@ fn block_hash_changes_when_nonce_changes() {
 
 #[test]
 fn block_hash_changes_when_transaction_added() {
-    let mut block = Block::new(1, vec![], "0".repeat(64));
-    let hash_before = block.compute_hash();
-    block.transactions.push(Transaction::coinbase("alice", 50));
-    let hash_after = block.compute_hash();
-    assert_ne!(hash_before, hash_after);
+    let block_empty = Block::new(1, vec![], "0".repeat(64));
+    let tx = Transaction::coinbase("alice", 50);
+    let block_with_tx = Block::new(1, vec![tx], "0".repeat(64));
+    assert_ne!(block_empty.compute_hash(), block_with_tx.compute_hash());
 }
 
 #[test]
