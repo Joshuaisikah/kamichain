@@ -1,4 +1,4 @@
-use kamichain_core::{Chain, ProofOfWork, Transaction};
+use kamichain_core::{ProofOfWork, Transaction};
 use kamichain_node::mempool::Mempool;
 use kamichain_node::miner::{Miner, BLOCK_REWARD};
 use kamichain_node::state::NodeState;

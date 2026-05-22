@@ -82,7 +82,10 @@ async fn tx_submit_adds_to_mempool() {
     let (server, port) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
-    let tx = kamichain_core::Transaction::new("alice", "bob", 10);
+    let wallet = kamichain_wallet::Wallet::new();
+    let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10);
+    wallet.sign_transaction(&mut tx).unwrap();
+
     let resp = send(port, serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } })).await;
     assert_eq!(resp["ok"], true);
 }

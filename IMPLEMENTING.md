@@ -149,6 +149,7 @@ pub struct Chain {
 `is_valid()`:
   - Walk every block from index 1
   - Check `blocks[i].prev_hash == blocks[i-1].hash`
+  - **Check merkle root**: recompute `MerkleTree::new(blocks[i].transactions.iter().map(|t| t.compute_id()).collect()).root()` and verify it equals `blocks[i].merkle_root`. Using `compute_id()` (not the stored `t.id`) means tampered transaction fields (e.g. a changed `amount`) are detected here.
   - Check `blocks[i].hash == blocks[i].compute_hash()`
   - Check PoW on every block  
 
