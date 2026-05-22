@@ -11,6 +11,9 @@ forks via longest-chain rule. Interact via the `kami` CLI.
 ```
 kamichain/
 ├── LICENSE
+├── IMPLEMENTING.md          # Step-by-step implementation guide
+├── justfile                 # Dev shortcuts (just test, just node, just ci …)
+├── .rustfmt.toml            # Formatting config
 ├── docs/
 │   ├── architecture.md      # Design decisions and data-flow diagrams
 │   └── protocol.md          # Full RPC and P2P wire-format spec

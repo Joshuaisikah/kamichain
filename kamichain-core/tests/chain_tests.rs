@@ -134,3 +134,28 @@ fn latest_block_returns_last_added() {
     assert_eq!(chain.latest_block().index, 1);
     assert_eq!(chain.latest_block().transactions[0].recipient, "bob");
 }
+
+#[test]
+fn get_block_returns_genesis_at_index_zero() {
+    let chain = Chain::new(2);
+    let block = chain.get_block(0).expect("genesis should exist");
+    assert_eq!(block.index, 0);
+}
+
+#[test]
+fn get_block_returns_correct_block_by_index() {
+    let mut chain = Chain::new(2);
+    mine_and_add(&mut chain, vec![Transaction::coinbase("alice", 50)]);
+    mine_and_add(&mut chain, vec![Transaction::coinbase("bob", 50)]);
+
+    let b1 = chain.get_block(1).unwrap();
+    let b2 = chain.get_block(2).unwrap();
+    assert_eq!(b1.transactions[0].recipient, "alice");
+    assert_eq!(b2.transactions[0].recipient, "bob");
+}
+
+#[test]
+fn get_block_returns_none_for_out_of_range_index() {
+    let chain = Chain::new(2);
+    assert!(chain.get_block(999).is_none());
+}

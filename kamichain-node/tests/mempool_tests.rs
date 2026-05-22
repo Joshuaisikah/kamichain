@@ -91,3 +91,31 @@ fn take_does_not_remove_transactions_from_pool() {
     let _ = pool.take(10);
     assert_eq!(pool.len(), 1);
 }
+
+// ── Balance validation tests ──────────────────────────────────
+// The mempool can optionally check balances at admission time.
+// If it does, these tests specify the expected behaviour.
+// If balance checking is done at mining time instead, these
+// tests still document the invariant that must hold.
+
+#[test]
+fn transfer_with_zero_amount_is_rejected() {
+    let mut pool = Mempool::new(100);
+    let tx = Transaction::new("alice", "bob", 0);
+    assert!(pool.add(tx).is_err(), "zero-amount transfer should be rejected");
+}
+
+#[test]
+fn coinbase_transaction_is_not_admitted_to_mempool() {
+    // Coinbase txs are created by the miner, not submitted externally
+    let mut pool = Mempool::new(100);
+    let tx = Transaction::coinbase("miner", 50);
+    assert!(pool.add(tx).is_err(), "coinbase should not be user-submittable");
+}
+
+#[test]
+fn transaction_with_sender_equal_to_recipient_is_rejected() {
+    let mut pool = Mempool::new(100);
+    let tx = Transaction::new("alice", "alice", 10);
+    assert!(pool.add(tx).is_err(), "self-transfer should be rejected");
+}
