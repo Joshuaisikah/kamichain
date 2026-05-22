@@ -28,25 +28,27 @@ fn miner_earns_reward_after_mining_first_block() {
 
 #[test]
 fn signed_transaction_moves_funds_between_wallets() {
-    let state    = make_state(2);
-    let mut pool = Mempool::new(1000);
-    let miner    = Miner::new("miner_addr", 2);
+    let state        = make_state(2);
+    let mut pool     = Mempool::new(1000);
+    let miner_wallet = Wallet::new();
+    let miner_addr   = miner_wallet.address();
+    let miner        = Miner::new(&miner_addr, 2);
 
-    // Mine a block — miner earns BLOCK_REWARD
+    // Mine a block — miner earns BLOCK_REWARD at their real wallet address
     miner.mine_and_commit(&state, &mut pool).unwrap();
 
-    // Miner sends 10 coins to alice
-    let mut tx = Transaction::new("miner_addr", "alice_addr", 10);
-    let wallet = Wallet::new();
-    wallet.sign_transaction(&mut tx).unwrap();
+    // Miner sends 10 coins to alice using a properly signed transaction
+    let alice_addr = "alice_recipient_address";
+    let mut tx = Transaction::new(&miner_addr, alice_addr, 10);
+    miner_wallet.sign_transaction(&mut tx).unwrap();
     pool.add(tx).unwrap();
 
     // Mine a second block to confirm the transaction
     miner.mine_and_commit(&state, &mut pool).unwrap();
 
     let state_r = state.read().unwrap();
-    assert_eq!(state_r.balance_of("alice_addr"), 10);
-    assert_eq!(state_r.balance_of("miner_addr"), BLOCK_REWARD * 2 - 10);
+    assert_eq!(state_r.balance_of(alice_addr), 10);
+    assert_eq!(state_r.balance_of(&miner_addr), BLOCK_REWARD * 2 - 10);
 }
 
 #[test]
@@ -66,14 +68,20 @@ fn chain_grows_correctly_over_multiple_mine_cycles() {
 
 #[test]
 fn mempool_is_empty_after_all_txs_confirmed() {
-    let state    = make_state(2);
-    let mut pool = Mempool::new(1000);
-    let miner    = Miner::new("miner_addr", 2);
+    let state        = make_state(2);
+    let mut pool     = Mempool::new(1000);
+    let miner_wallet = Wallet::new();
+    let miner_addr   = miner_wallet.address();
+    let miner        = Miner::new(&miner_addr, 2);
 
     miner.mine_and_commit(&state, &mut pool).unwrap();
 
-    pool.add(Transaction::new("miner_addr", "bob", 5)).unwrap();
-    pool.add(Transaction::new("miner_addr", "carol", 3)).unwrap();
+    let mut tx1 = Transaction::new(&miner_addr, "bob", 5);
+    let mut tx2 = Transaction::new(&miner_addr, "carol", 3);
+    miner_wallet.sign_transaction(&mut tx1).unwrap();
+    miner_wallet.sign_transaction(&mut tx2).unwrap();
+    pool.add(tx1).unwrap();
+    pool.add(tx2).unwrap();
 
     miner.mine_and_commit(&state, &mut pool).unwrap();
 
@@ -122,13 +130,10 @@ fn wallet_signature_is_verified_before_mempool_admission() {
 
     miner.mine_and_commit(&state, &mut pool).unwrap();
 
-    // Unsigned transaction — mempool should reject it
+    // Unsigned transaction — mempool must reject it at add() time
     let unsigned = Transaction::new("miner_addr", "alice", 5);
-    // This behaviour is implemented in the mempool or miner — unsigned txs
-    // should not be included in a mined block
-    // (exact error type depends on your implementation)
-    let result = pool.add(unsigned);
-    // Either rejected at add time, or filtered at mining time — assert chain stays valid
+    assert!(pool.add(unsigned).is_err(), "unsigned tx must be rejected at mempool admission");
+
     miner.mine_and_commit(&state, &mut pool).unwrap();
     assert!(state.read().unwrap().chain.is_valid().is_ok());
 }

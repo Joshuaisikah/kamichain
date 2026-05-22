@@ -40,13 +40,15 @@ pub struct Transaction {
     pub sender: String,
     pub recipient: String,
     pub amount: u64,
+    pub fee: u64,                  // miner tip; 0 by default and for coinbase
+    pub pub_key: Option<String>,   // hex-encoded verifying key; set by sign_transaction
     pub signature: Option<String>,
 }
 ```
 
-`Transaction::new(sender, recipient, amount)` — set `id = compute_id()`, type = Transfer, signature = None  
-`Transaction::coinbase(recipient, reward)` — sender = "", type = Coinbase  
-`compute_id()` — SHA-256 of `sender + recipient + amount.to_string()`, returned as lowercase hex  
+`Transaction::new(sender, recipient, amount)` — set `id = compute_id()`, type = Transfer, `fee = 0`, `pub_key = None`, `signature = None`  
+`Transaction::coinbase(recipient, reward)` — sender = `""`, type = Coinbase, `fee = 0`, `pub_key = None`  
+`compute_id()` — SHA-256 of `sender + recipient + amount.to_string()`, returned as lowercase hex. **Fee is not part of the ID** — it is informational metadata for mempool ordering only.  
 `is_coinbase()` — checks `tx_type == TxType::Coinbase`
 
 ```bash
@@ -187,10 +189,13 @@ pub struct Wallet { signing_key: ed25519_dalek::SigningKey }
   - Build the message bytes: `format!("{}{}{}{}", tx.sender, tx.recipient, tx.amount, tx.id)` as UTF-8
   - `signing_key.sign(message_bytes)`
   - Store `hex::encode(signature.to_bytes())` in `tx.signature`
+  - **Also store** `self.public_key_hex()` in `tx.pub_key` — the mempool uses this to verify ownership
 
 `verify_transaction(tx, public_key_hex)`:
   - Return `Err(MissingSignature)` if `tx.signature.is_none()`
-  - Decode public key from hex → `VerifyingKey`
+  - Decode `public_key_hex` from hex → 32 raw bytes
+  - **Check address ownership**: SHA-256 of those 32 bytes must equal `tx.sender`. If not, return `Err(InvalidPublicKey("pub_key does not match sender address".into()))`. This proves the key owns the address.
+  - Build `VerifyingKey` from the decoded bytes
   - Rebuild the same message bytes used during signing
   - Decode signature from hex → `Signature`
   - Call `verifying_key.verify(message, &signature)`, map error
@@ -241,10 +246,21 @@ pub struct Mempool {
 ```
 
 `new(capacity)` — empty pending map  
-`add(tx)` — reject if `pending.contains_key(&tx.id)` (duplicate) or `pending.len() >= capacity` (full)  
+`add(tx)` — validate in this order, returning `Err` at first failure:
+  1. Reject if `tx.is_coinbase()` — coinbase is created by the miner, not submitted externally
+  2. Reject if `tx.sender == tx.recipient` — self-transfer
+  3. Reject if `tx.amount == 0` — zero-value transfer
+  4. Reject if `tx.pub_key.is_none()` — no public key means unsigned
+  5. Call `Wallet::verify_transaction(&tx, pub_key_hex)?` — rejects if the pub_key doesn't own the sender address **or** the signature is invalid
+  6. Reject if `pending.contains_key(&tx.id)` — duplicate
+  7. Reject if `pending.len() >= capacity` — pool full
+  8. Insert into pending map  
+
 `remove(tx_id)` — `pending.remove(tx_id)`  
-`take(max)` — return up to `max` values (order doesn't matter yet; use `.values().take(max)`)  
+`take(max)` — sort pending values by `fee` **descending**, return the first `max`. Higher-fee transactions are included in blocks first.  
 `len()`, `contains(tx_id)`, `is_empty()` — straightforward
+
+**Note:** `kamichain-node` depends on `kamichain-wallet`, so you can `use kamichain_wallet::Wallet;` inside `mempool.rs`.
 
 ```bash
 cargo test -p kamichain-node --test mempool_tests

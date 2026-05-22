@@ -41,6 +41,14 @@ fn signing_a_transaction_sets_signature() {
 }
 
 #[test]
+fn sign_transaction_sets_pub_key() {
+    let wallet = Wallet::new();
+    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    wallet.sign_transaction(&mut tx).expect("signing failed");
+    assert_eq!(tx.pub_key.as_deref(), Some(wallet.public_key_hex().as_str()));
+}
+
+#[test]
 fn signature_is_valid_hex() {
     let wallet = Wallet::new();
     let mut tx = Transaction::new(wallet.address(), "bob", 10);

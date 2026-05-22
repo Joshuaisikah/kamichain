@@ -68,3 +68,15 @@ fn new_transaction_has_no_signature() {
     let tx = Transaction::new("alice", "bob", 10);
     assert!(tx.signature.is_none());
 }
+
+#[test]
+fn transaction_has_zero_fee_by_default() {
+    let tx = Transaction::new("alice", "bob", 10);
+    assert_eq!(tx.fee, 0);
+}
+
+#[test]
+fn transaction_pub_key_is_none_before_signing() {
+    let tx = Transaction::new("alice", "bob", 10);
+    assert!(tx.pub_key.is_none());
+}

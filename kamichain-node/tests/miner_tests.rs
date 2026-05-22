@@ -2,6 +2,7 @@ use kamichain_core::{Chain, ProofOfWork, Transaction};
 use kamichain_node::mempool::Mempool;
 use kamichain_node::miner::{Miner, BLOCK_REWARD};
 use kamichain_node::state::NodeState;
+use kamichain_wallet::Wallet;
 use std::sync::{Arc, RwLock};
 
 fn make_state(difficulty: usize) -> Arc<RwLock<NodeState>> {
@@ -67,10 +68,16 @@ fn mine_and_commit_adds_block_to_chain() {
 
 #[test]
 fn mine_and_commit_includes_mempool_transactions() {
-    let state = make_state(2);
+    let state   = make_state(2);
     let mut mempool = Mempool::new(100);
-    mempool.add(Transaction::new("alice", "bob", 5)).unwrap();
-    mempool.add(Transaction::new("alice", "carol", 3)).unwrap();
+
+    let wallet = Wallet::new();
+    let mut tx1 = Transaction::new(wallet.address(), "bob", 5);
+    let mut tx2 = Transaction::new(wallet.address(), "carol", 3);
+    wallet.sign_transaction(&mut tx1).unwrap();
+    wallet.sign_transaction(&mut tx2).unwrap();
+    mempool.add(tx1).unwrap();
+    mempool.add(tx2).unwrap();
 
     let miner = Miner::new("miner_address", 2);
     let block = miner.mine_and_commit(&state, &mut mempool).unwrap();
@@ -81,9 +88,13 @@ fn mine_and_commit_includes_mempool_transactions() {
 
 #[test]
 fn mine_and_commit_removes_included_txs_from_mempool() {
-    let state = make_state(2);
+    let state   = make_state(2);
     let mut mempool = Mempool::new(100);
-    mempool.add(Transaction::new("alice", "bob", 5)).unwrap();
+
+    let wallet  = Wallet::new();
+    let mut tx  = Transaction::new(wallet.address(), "bob", 5);
+    wallet.sign_transaction(&mut tx).unwrap();
+    mempool.add(tx).unwrap();
 
     let miner = Miner::new("miner_address", 2);
     miner.mine_and_commit(&state, &mut mempool).unwrap();
