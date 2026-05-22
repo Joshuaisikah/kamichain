@@ -4,9 +4,13 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[lib]
+name = "kamichain_node"
+path = "src/lib.rs"
+
 [[bin]]
 name = "kamichain-node"
-path = "src/main.rs"
+path = "src/bin/node.rs"
 
 [dependencies]
 kamichain-core   = { path = "../kamichain-core" }
