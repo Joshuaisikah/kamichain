@@ -186,20 +186,21 @@ pub struct Wallet { signing_key: ed25519_dalek::SigningKey }
 `Wallet::new()` — `SigningKey::generate(&mut OsRng)`  
 `address()` — SHA-256 of the 32-byte public key, return as hex  
 `public_key_hex()` — `hex::encode(self.signing_key.verifying_key().to_bytes())`  
-`sign_transaction(&self, tx: &mut Transaction)`:
+`sign_transaction(&self, tx: &mut Transaction) -> Result<(), WalletError>`:
   - Build the message bytes: `format!("{}{}{}{}", tx.sender, tx.recipient, tx.amount, tx.id)` as UTF-8
   - `signing_key.sign(message_bytes)`
   - Store `hex::encode(signature.to_bytes())` in `tx.signature`
   - **Also store** `self.public_key_hex()` in `tx.pub_key` — the mempool uses this to verify ownership
+  - Return `Ok(())`
 
-`verify_transaction(tx, public_key_hex)`:
+`verify_transaction(tx: &Transaction, public_key_hex: &str) -> Result<bool, WalletError>`:
   - Return `Err(MissingSignature)` if `tx.signature.is_none()`
   - Decode `public_key_hex` from hex → 32 raw bytes
   - **Check address ownership**: SHA-256 of those 32 bytes must equal `tx.sender`. If not, return `Err(InvalidPublicKey("pub_key does not match sender address".into()))`. This proves the key owns the address.
   - Build `VerifyingKey` from the decoded bytes
   - Rebuild the same message bytes used during signing
   - Decode signature from hex → `Signature`
-  - Call `verifying_key.verify(message, &signature)`, map error
+  - Call `verifying_key.verify(message, &signature)` — return `Ok(true)` on success, map error to `Err(VerificationFailed)`
 
 **Also implement:**
 - `save_to_file(path)` — hex-encode the 32-byte secret key, write to file
@@ -296,20 +297,26 @@ pub const MAX_TXS_PER_BLOCK: usize = 100;
 pub struct Miner { pub address: String, pub pow: ProofOfWork }
 ```
 
-`new(address, difficulty)` — store both  
-`mine_block(state, mempool)`:
-  1. Take up to `MAX_TXS_PER_BLOCK` txs from mempool
-  2. Prepend `Transaction::coinbase(&self.address, BLOCK_REWARD)`
-  3. Build `Block::new(chain.len() as u64, txs, latest_hash)`
-  4. `self.pow.mine(&mut block)`
-  5. Return block
+`new(address: &str, difficulty: usize)` — store both (clone address to `String`)  
+`mine_block(&self, state: &SharedState, mempool: &Mempool) -> Block` — **synchronous** (Rayon-parallel nonce search, no `.await`):
+  1. Read chain via `state.read().unwrap()` to get `len()` and `latest_block().hash`
+  2. Call `mempool.take(MAX_TXS_PER_BLOCK)` to get pending txs
+  3. Prepend `Transaction::coinbase(&self.address, BLOCK_REWARD)`
+  4. `Block::new(index, txs, latest_hash)`
+  5. `self.pow.mine(&mut block)`
+  6. Return block
 
-`mine_and_commit(state, mempool)`:
-  1. `mine_block`
-  2. `state.write().chain.add_block(block.clone())`
-  3. `state.write().apply_block(&block)`
-  4. For each tx in block: `mempool.remove(&tx.id)`
-  5. Return block
+`mine_and_commit(&self, state: &SharedState, mempool: &mut Mempool) -> Result<Block, KamiError>` — **synchronous**:
+  1. Call `mine_block`
+  2. **Acquire a single write lock** for atomicity — block must never be visible in the chain without its balances applied:
+     ```rust
+     let mut state_w = state.write().unwrap();
+     state_w.chain.add_block(block.clone())?;
+     state_w.apply_block(&block);
+     // lock is released here
+     ```
+  3. Remove each confirmed tx from mempool: `for tx in &block.transactions { mempool.remove(&tx.id) }`
+  4. Return `Ok(block)`
 
 ```bash
 cargo test -p kamichain-node --test miner_tests
@@ -383,11 +390,11 @@ Unit variants (`GetChain`, `GetPeers`) serialize with no content field.
 `new(addr, state, mempool)` — **synchronous**: bind with `std::net::TcpListener::bind(addr)`, call `set_nonblocking(true)`. Tests call `new` without `.await`.  
 `listen_addr() -> String` — `self.listener.local_addr().unwrap().to_string()`  
 `peers() -> Vec<String>` — return a clone of the peer list snapshot  
-`listen() -> anyhow::Result<()>` — convert via `tokio::net::TcpListener::from_std`, accept loop, spawn handler per connection  
-`connect(peer_addr) -> anyhow::Result<()>` — open TCP connection, add to peer list, spawn handler  
-`broadcast_block(block)` — send `Message::NewBlock` to all peers  
-`broadcast_tx(tx)` — send `Message::NewTx` to all peers  
-`sync_with_peer(addr)` — connect, send `GetChain`, receive `Chain`, call `state.chain.replace`
+`async fn listen(&self) -> anyhow::Result<()>` — convert via `tokio::net::TcpListener::from_std`, accept loop, spawn handler per connection  
+`async fn connect(&self, peer_addr: &str) -> anyhow::Result<()>` — open TCP connection, add to peer list, spawn message-handler  
+`async fn broadcast_block(&self, block: &Block)` — write `Message::NewBlock(block.clone())` to all peers  
+`async fn broadcast_tx(&self, tx: &Transaction)` — write `Message::NewTx(tx.clone())` to all peers  
+`async fn sync_with_peer(&self, addr: &str) -> anyhow::Result<()>` — connect, send `GetChain`, receive `Chain(blocks)`, call `state.write().chain.replace(blocks)`
 
 On receiving `NewBlock`: validate and `chain.add_block`, then `apply_block`. If rejected and peer seems ahead, send `GetChain`.
 
