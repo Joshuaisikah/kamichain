@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "kamichain-core",
+    "kamichain-wallet",
+    "kamichain-node",
+    "kamichain-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["cyber-alchemist"]
+license = "MIT"
+
+[workspace.dependencies]
+# Serialization
+serde       = { version = "1.0", features = ["derive"] }
+serde_json  = "1.0"
+
+# Hashing and crypto
+sha2        = "0.10"
+hex         = "0.4"
+ed25519-dalek = { version = "2.1", features = ["rand_core"] }
+rand        = "0.8"
+
+# Error handling
+thiserror   = "2.0"
+anyhow      = "1.0"
+
+# Async and networking
+tokio       = { version = "1", features = ["full"] }
+
+# CLI
+clap        = { version = "4.5", features = ["derive"] }
+
+# Time
+chrono      = { version = "0.4", features = ["serde"] }

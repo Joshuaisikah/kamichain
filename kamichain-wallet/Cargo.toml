@@ -1,0 +1,15 @@
+[package]
+name    = "kamichain-wallet"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+kamichain-core = { path = "../kamichain-core" }
+serde.workspace       = true
+serde_json.workspace  = true
+sha2.workspace        = true
+hex.workspace         = true
+ed25519-dalek.workspace = true
+rand.workspace        = true
+thiserror.workspace   = true

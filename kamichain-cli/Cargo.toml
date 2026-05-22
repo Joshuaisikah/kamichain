@@ -1,0 +1,16 @@
+[package]
+name    = "kamichain-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "kami"
+path = "src/main.rs"
+
+[dependencies]
+kamichain-core   = { path = "../kamichain-core" }
+kamichain-wallet = { path = "../kamichain-wallet" }
+serde_json.workspace = true
+clap.workspace      = true
+anyhow.workspace    = true
