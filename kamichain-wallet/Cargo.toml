@@ -1,8 +1,9 @@
 [package]
-name    = "kamichain-wallet"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
+name             = "kamichain-wallet"
+version.workspace  = true
+edition.workspace  = true
+authors.workspace  = true
+license.workspace  = true
 
 [dependencies]
 kamichain-core = { path = "../kamichain-core" }

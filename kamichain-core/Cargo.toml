@@ -1,8 +1,9 @@
 [package]
-name    = "kamichain-core"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
+name             = "kamichain-core"
+version.workspace  = true
+edition.workspace  = true
+authors.workspace  = true
+license.workspace  = true
 
 [dependencies]
 serde.workspace      = true

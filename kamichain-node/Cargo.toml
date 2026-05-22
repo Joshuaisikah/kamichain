@@ -1,8 +1,9 @@
 [package]
-name    = "kamichain-node"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
+name             = "kamichain-node"
+version.workspace  = true
+edition.workspace  = true
+authors.workspace  = true
+license.workspace  = true
 
 [lib]
 name = "kamichain_node"
