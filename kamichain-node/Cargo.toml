@@ -15,8 +15,9 @@ path = "src/bin/node.rs"
 [dependencies]
 kamichain-core   = { path = "../kamichain-core" }
 kamichain-wallet = { path = "../kamichain-wallet" }
-serde.workspace     = true
+serde.workspace      = true
 serde_json.workspace = true
-tokio.workspace     = true
-thiserror.workspace = true
-anyhow.workspace    = true
+tokio.workspace      = true
+thiserror.workspace  = true
+anyhow.workspace     = true
+rayon.workspace      = true

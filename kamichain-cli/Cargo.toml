@@ -12,5 +12,6 @@ path = "src/main.rs"
 kamichain-core   = { path = "../kamichain-core" }
 kamichain-wallet = { path = "../kamichain-wallet" }
 serde_json.workspace = true
-clap.workspace      = true
-anyhow.workspace    = true
+clap.workspace       = true
+anyhow.workspace     = true
+tokio.workspace      = true

@@ -5,9 +5,17 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-serde.workspace     = true
+serde.workspace      = true
 serde_json.workspace = true
-sha2.workspace      = true
-hex.workspace       = true
-thiserror.workspace = true
-chrono.workspace    = true
+sha2.workspace       = true
+hex.workspace        = true
+thiserror.workspace  = true
+chrono.workspace     = true
+rayon.workspace      = true
+
+[dev-dependencies]
+criterion.workspace  = true
+
+[[bench]]
+name    = "chain_bench"
+harness = false

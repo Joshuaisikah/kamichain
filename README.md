@@ -10,17 +10,26 @@ forks via longest-chain rule. Interact via the `kami` CLI.
 
 ```
 kamichain/
-├── kamichain-core/          # Block, Chain, Transaction, ProofOfWork
+├── LICENSE
+├── docs/
+│   ├── architecture.md      # Design decisions and data-flow diagrams
+│   └── protocol.md          # Full RPC and P2P wire-format spec
+│
+├── kamichain-core/          # Block, Chain, Transaction, Merkle, ProofOfWork
 │   ├── src/
 │   │   ├── lib.rs
-│   │   ├── error.rs         # KamiError — one error type for the whole crate
+│   │   ├── error.rs         # KamiError
 │   │   ├── transaction.rs   # Transaction, TxType (Coinbase | Transfer)
-│   │   ├── block.rs         # Block — index, timestamp, txs, prev_hash, hash, nonce
-│   │   ├── pow.rs           # ProofOfWork — mine, validate, difficulty target
+│   │   ├── block.rs         # Block — index, timestamp, merkle_root, prev_hash, hash, nonce
+│   │   ├── merkle.rs        # MerkleTree — root, verify (inclusion proof)
+│   │   ├── pow.rs           # ProofOfWork — mine (multi-threaded via Rayon), validate
 │   │   └── chain.rs         # Chain — add_block, is_valid, replace (fork resolution)
+│   ├── benches/
+│   │   └── chain_bench.rs   # Criterion benchmarks: hashing, mining, validation
 │   └── tests/
 │       ├── block_tests.rs
 │       ├── chain_tests.rs
+│       ├── merkle_tests.rs
 │       ├── pow_tests.rs
 │       └── transaction_tests.rs
 │
@@ -32,32 +41,35 @@ kamichain/
 │   └── tests/
 │       └── wallet_tests.rs
 │
-├── kamichain-node/          # Running node — mempool, miner, RPC, P2P
+├── kamichain-node/          # Running node — mempool, miner, RPC, P2P, storage
 │   ├── src/
 │   │   ├── lib.rs
-│   │   ├── state.rs         # NodeState — Chain + balance ledger, wrapped in Arc<RwLock<>>
+│   │   ├── state.rs         # NodeState — Chain + balance ledger, Arc<RwLock<>>
 │   │   ├── mempool.rs       # Mempool — pending tx pool with capacity limit
-│   │   ├── miner.rs         # Miner — mine_block, mine_and_commit, BLOCK_REWARD
-│   │   ├── rpc.rs           # RpcServer — JSON over TCP, chain/tx/wallet/peers endpoints
-│   │   ├── p2p.rs           # P2PLayer — gossip protocol, chain sync, peer discovery
+│   │   ├── miner.rs         # Miner — parallel nonce search (Rayon), mine_and_commit
+│   │   ├── rpc.rs           # RpcServer — newline-JSON over TCP
+│   │   ├── p2p.rs           # P2PLayer — gossip, chain sync, peer exchange
+│   │   ├── storage.rs       # Storage — persist/load chain to disk (atomic write)
 │   │   └── bin/
-│   │       └── node.rs      # Binary entrypoint — parse flags, start RPC + P2P + mining loop
+│   │       └── node.rs      # Binary — flags, starts RPC + P2P + mining loop
 │   └── tests/
-│       ├── state_tests.rs
 │       ├── mempool_tests.rs
 │       ├── miner_tests.rs
+│       ├── state_tests.rs
+│       ├── storage_tests.rs
 │       ├── rpc_tests.rs
-│       └── p2p_tests.rs
+│       ├── p2p_tests.rs
+│       └── e2e_tests.rs     # Golden-path: wallet → tx → mine → confirm → balance
 │
 └── kamichain-cli/           # `kami` binary — talks to a node over RPC
-    ├── src/
-    │   ├── main.rs
-    │   └── commands/
-    │       ├── mod.rs
-    │       ├── wallet.rs    # kami wallet new | address | balance
-    │       ├── tx.rs        # kami tx send | get
-    │       └── chain.rs     # kami chain info | block | validate
-    └── (no integration tests — use kami against a live node)
+    └── src/
+        ├── main.rs
+        └── commands/
+            ├── mod.rs
+            ├── wallet.rs    # kami wallet new | address | balance
+            ├── tx.rs        # kami tx send | get
+            ├── chain.rs     # kami chain info | block | validate
+            └── node.rs      # kami node start | peers | sync
 ```
 
 ---
@@ -104,6 +116,9 @@ cargo test --workspace
 cargo test -p kamichain-core
 cargo test -p kamichain-wallet
 cargo test -p kamichain-node
+
+# benchmarks (run after implementing)
+cargo bench -p kamichain-core
 ```
 
 Tests will not compile until you define the public API. They are the spec —
@@ -133,11 +148,15 @@ cargo run --bin kami -- mine --address <your-address>
 | Workspace with multiple crates | `Cargo.toml` |
 | Custom error types (`thiserror`) | `error.rs` in each crate |
 | SHA-256 hashing | `block.rs`, `transaction.rs` |
+| Merkle tree | `merkle.rs` |
 | Proof-of-work mining | `pow.rs` |
+| Multi-threaded nonce search (Rayon) | `miner.rs` |
 | Ed25519 signatures | `wallet.rs` |
 | `Arc<RwLock<>>` shared state | `state.rs` |
+| Chain persistence (atomic file writes) | `storage.rs` |
 | Async TCP server (`tokio`) | `rpc.rs`, `p2p.rs` |
-| Newline-delimited JSON protocol | `p2p.rs` |
+| Newline-delimited JSON protocol | `p2p.rs`, `docs/protocol.md` |
 | Fork resolution (longest chain) | `chain.rs` |
-| Integration test suite | `tests/` in each crate |
+| Integration + end-to-end test suite | `tests/` in each crate |
+| Criterion benchmarks | `kamichain-core/benches/` |
 | CI (build, test, clippy, fmt) | `.github/workflows/ci.yml` |
