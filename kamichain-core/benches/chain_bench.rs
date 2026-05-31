@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use kamichain_core::{Block, Chain, ProofOfWork};
-use kamichain_core::merkle::MarkleTree;
+use kamichain_core::merkle::MerkleTree;
 
 fn bench_block_hashing(c: &mut Criterion) {
     let block = Block::genesis();
@@ -13,7 +13,7 @@ fn bench_merkle_root_100_txs(c: &mut Criterion) {
     let hashes: Vec<String> = (0..100).map(|i| format!("tx{:04x}", i)).collect();
     c.bench_function("merkle_root_100_txs", |b| {
         b.iter(|| {
-            let tree = MarkleTree::new(black_box(hashes.clone()));
+            let tree = MerkleTree::new(black_box(hashes.clone()));
             black_box(tree.root())
         })
     });

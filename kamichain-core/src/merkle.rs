@@ -1,14 +1,14 @@
 use sha2::{Digest, Sha256};
 #[derive(Debug, Clone)]
-pub struct  MarkleTree{
+pub struct MerkleTree {
     leaves: Vec<String>,
     root: String,
 }
-impl MarkleTree{
+impl MerkleTree{
     pub fn new(hashes: Vec<String>)->Self{
     if hashes.is_empty() {
         let root = hash_str("");
-        return MarkleTree { leaves: vec![], root }
+        return MerkleTree { leaves: vec![], root }
     }
         let leaves = hashes.clone();
         let mut level= hashes.iter().map(|h| hash_str(h)).collect::<Vec<_>>();
@@ -27,7 +27,7 @@ impl MarkleTree{
             }
             level = next_level;
         }
-        MarkleTree {
+        MerkleTree {
                 leaves,
                 root:level[0].clone(),
             }

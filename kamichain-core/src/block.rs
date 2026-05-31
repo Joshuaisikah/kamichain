@@ -2,7 +2,7 @@ use serde::{Deserialize,Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::transaction::Transaction;
-use crate::merkle::MarkleTree;
+use crate::merkle::MerkleTree;
 #[derive(Debug,Clone,PartialEq,Eq,Serialize,Deserialize)]
 pub struct Block{
     pub index: u64,
@@ -20,7 +20,7 @@ impl Block{
             index: 0,
             timestamp: 0,
             transactions:vec![],
-            merkle_root:MarkleTree::new(vec![]).root(),
+            merkle_root:MerkleTree::new(vec![]).root(),
             prev_hash: "0".repeat(64),
             hash: String::new(),
             nonce: 0,
@@ -30,7 +30,7 @@ impl Block{
     }
     pub fn new(index: u64, transactions: Vec<Transaction>,prev_hash:String) ->Self{
         let tx_ids = transactions.iter().map(|tx|tx.id.clone()).collect();
-        let merkle_root =MarkleTree::new(tx_ids).root();
+        let merkle_root =MerkleTree::new(tx_ids).root();
         let mut block = Block{
             index,
             timestamp:now(),

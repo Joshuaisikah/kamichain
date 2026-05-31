@@ -1,6 +1,6 @@
 use crate::block::Block;
 use crate::error::KamiError;
-use crate::merkle::MarkleTree;
+use crate::merkle::MerkleTree;
 use crate::pow::ProofOfWork;
 use  serde::{Deserialize,Serialize};
 
@@ -43,9 +43,9 @@ impl Chain {
             if current.prev_hash != prev.hash {
                 return Err(KamiError::InvalidPoW);
             }
-            let tx_isd: Vec<String> = current.transactions.iter().map(|tx| tx.compute_id()).collect();
-            let markle_root = MarkleTree::new(tx_isd).root();
-            if markle_root != current.merkle_root {
+            let tx_ids: Vec<String> = current.transactions.iter().map(|tx| tx.compute_id()).collect();
+            let merkle_root = MerkleTree::new(tx_ids).root();
+            if merkle_root != current.merkle_root {
                 return Err(KamiError::InvalidChain(format!("Block {} has invalid merkle root", i)));
             }
             if !current.is_hash_valid() {
