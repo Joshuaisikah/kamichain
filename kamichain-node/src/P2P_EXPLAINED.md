@@ -94,7 +94,7 @@ Called for every accepted or outbound connection. Reads one line from the stream
 |------------------|--------|
 | `NewBlock(block)` | Write-lock state, call `chain.add_block`. If the block is valid, also call `apply_block` to update balances. If invalid (block is behind, wrong hash), the error is swallowed — a future enhancement would send `GetChain` to catch up. |
 | `GetChain` | Read-lock state, clone all blocks, send `Chain(blocks)` response. |
-| `NewTx(tx)` | Lock mempool, call `mempool.add(tx)`. Invalid or duplicate transactions are silently dropped. |
+| `NewTx(tx)` | Read-lock state to get sender's on-chain balance, then lock mempool and call `mempool.add(tx, sender_balance)`. Transactions with insufficient balance or bad signatures are silently dropped. |
 | `GetPeers` | Send `Peers([])` — peer exchange is not yet implemented. |
 | anything else | Ignored (`_` arm). |
 

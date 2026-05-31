@@ -92,11 +92,11 @@ Called once per connection. Reads exactly one line from the socket, parses it as
 
 Pattern-matches on `req.method` and delegates to the appropriate handler. All handlers hold locks for the minimum time required.
 
-| Method | Lock held | What it does |
+| Method | Locks held | What it does |
 |--------|-----------|--------------|
 | `chain_info` | `RwLock::read` | Returns chain height, latest hash, difficulty |
 | `chain_block` | `RwLock::read` | Returns the serialised block at the given index |
-| `tx_submit` | `Mutex::lock` | Deserialises a `Transaction`, calls `mempool.add` |
+| `tx_submit` | `RwLock::read` then `Mutex::lock` | Reads sender balance from state, validates, calls `mempool.add` |
 | `wallet_balance` | `RwLock::read` | Looks up address in the balance ledger |
 | `node_peers` | none | Placeholder — returns empty peer list |
 | anything else | none | Returns `"unknown method"` error |
@@ -124,7 +124,14 @@ Returns an error if `index` is out of range.
 → {"ok": true, "result": {"submitted": true}}
 ```
 
-The transaction is validated by `mempool.add` which checks: not coinbase, sender ≠ recipient, amount > 0, valid signature, no duplicate, mempool not full.
+The handler reads the sender's confirmed on-chain balance from `NodeState` before touching the mempool:
+
+```rust
+let sender_balance = state.read().unwrap().balance_of(&tx.sender);
+mempool.lock().unwrap().add(tx, sender_balance)
+```
+
+`mempool.add` then checks in order: not coinbase, sender ≠ recipient, amount > 0, valid signature, `amount + fee <= sender_balance`, no duplicate, mempool not full. A wallet with zero on-chain balance will be rejected with `"insufficient balance"`.
 
 ### `wallet_balance`
 
