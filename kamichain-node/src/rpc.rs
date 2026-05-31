@@ -1,5 +1,3 @@
-
-// kamichain-node/src/rpc.rs
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
