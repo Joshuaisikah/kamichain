@@ -66,7 +66,7 @@ impl Mempool {
 
     pub fn take(&self, max: usize) -> Vec<Transaction> {
         let mut txs: Vec<&Transaction> = self.pending.values().collect();
-        txs.sort_by(|a, b| b.fee.cmp(&a.fee));
+        txs.sort_by_key(|b| std::cmp::Reverse(b.fee));
         txs.into_iter().take(max).cloned().collect()
     }
 
