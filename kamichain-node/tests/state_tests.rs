@@ -34,7 +34,7 @@ fn apply_transfer_debits_sender_and_credits_recipient() {
     state.apply_block(&b1);
 
     // Transfer 30 from alice to bob (state tests bypass mempool — apply directly)
-    let tx = Transaction::new("alice", "bob", 30);
+    let tx = Transaction::new("alice", "bob", 30, 0);
     let b2 = mined_block(&state, vec![Transaction::coinbase("miner", 50), tx]);
     state.apply_block(&b2);
 

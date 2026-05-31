@@ -15,12 +15,12 @@ use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
-async fn start_server() -> (RpcServer, u16) {
+async fn start_server() -> (RpcServer, u16, Arc<RwLock<NodeState>>) {
     let state   = Arc::new(RwLock::new(NodeState::new(2)));
     let mempool = Arc::new(Mutex::new(Mempool::new(1000)));
-    let server  = RpcServer::new("127.0.0.1:0", state, mempool);
+    let server  = RpcServer::new("127.0.0.1:0", Arc::clone(&state), mempool);
     let port    = server.local_port();
-    (server, port)
+    (server, port, state)
 }
 
 async fn send(port: u16, request: serde_json::Value) -> serde_json::Value {
@@ -37,7 +37,7 @@ async fn send(port: u16, request: serde_json::Value) -> serde_json::Value {
 
 #[tokio::test]
 async fn chain_info_returns_height_and_hash() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "chain_info" })).await;
@@ -49,7 +49,7 @@ async fn chain_info_returns_height_and_hash() {
 
 #[tokio::test]
 async fn chain_block_returns_genesis_at_index_zero() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "chain_block", "params": { "index": 0 } })).await;
@@ -59,7 +59,7 @@ async fn chain_block_returns_genesis_at_index_zero() {
 
 #[tokio::test]
 async fn chain_block_returns_error_for_missing_index() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "chain_block", "params": { "index": 999 } })).await;
@@ -69,7 +69,7 @@ async fn chain_block_returns_error_for_missing_index() {
 
 #[tokio::test]
 async fn wallet_balance_returns_zero_for_unknown_address() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "wallet_balance", "params": { "address": "unknown" } })).await;
@@ -79,11 +79,14 @@ async fn wallet_balance_returns_zero_for_unknown_address() {
 
 #[tokio::test]
 async fn tx_submit_adds_to_mempool() {
-    let (server, port) = start_server().await;
+    let (server, port, state) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let wallet = kamichain_wallet::Wallet::new();
-    let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10);
+    // Pre-fund the wallet so the balance check passes.
+    state.write().unwrap().balances.insert(wallet.address(), 1000);
+
+    let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).unwrap();
 
     let resp = send(port, serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } })).await;
@@ -91,8 +94,23 @@ async fn tx_submit_adds_to_mempool() {
 }
 
 #[tokio::test]
+async fn tx_submit_rejected_when_balance_insufficient() {
+    let (server, port, _) = start_server().await;
+    tokio::spawn(async move { server.run().await.unwrap() });
+
+    let wallet = kamichain_wallet::Wallet::new();
+    // Sender has zero on-chain balance — no pre-funding.
+    let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10, 0);
+    wallet.sign_transaction(&mut tx).unwrap();
+
+    let resp = send(port, serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } })).await;
+    assert_eq!(resp["ok"], false);
+    assert!(resp["error"].as_str().unwrap().contains("insufficient balance"));
+}
+
+#[tokio::test]
 async fn node_peers_returns_empty_list_initially() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "node_peers" })).await;
@@ -102,7 +120,7 @@ async fn node_peers_returns_empty_list_initially() {
 
 #[tokio::test]
 async fn unknown_method_returns_error() {
-    let (server, port) = start_server().await;
+    let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
     let resp = send(port, serde_json::json!({ "method": "not_a_real_method" })).await;

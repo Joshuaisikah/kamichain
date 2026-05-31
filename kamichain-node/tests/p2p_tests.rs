@@ -37,7 +37,7 @@ async fn message_new_block_roundtrips_json() {
 
 #[tokio::test]
 async fn message_new_tx_roundtrips_json() {
-    let tx  = Transaction::new("alice", "bob", 42);
+    let tx  = Transaction::new("alice", "bob", 42, 0);
     let msg = Message::NewTx(tx.clone());
     let json = serde_json::to_string(&msg).unwrap();
     let back: Message = serde_json::from_str(&json).unwrap();

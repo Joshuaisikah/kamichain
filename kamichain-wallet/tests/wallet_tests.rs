@@ -35,7 +35,7 @@ fn address_is_valid_hex() {
 #[test]
 fn signing_a_transaction_sets_signature() {
     let wallet = Wallet::new();
-    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
     assert!(tx.signature.is_some());
 }
@@ -43,7 +43,7 @@ fn signing_a_transaction_sets_signature() {
 #[test]
 fn sign_transaction_sets_pub_key() {
     let wallet = Wallet::new();
-    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
     assert_eq!(tx.pub_key.as_deref(), Some(wallet.public_key_hex().as_str()));
 }
@@ -51,7 +51,7 @@ fn sign_transaction_sets_pub_key() {
 #[test]
 fn signature_is_valid_hex() {
     let wallet = Wallet::new();
-    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
     let sig = tx.signature.as_ref().unwrap();
     assert!(sig.chars().all(|c| c.is_ascii_hexdigit()), "sig: {}", sig);
@@ -60,7 +60,7 @@ fn signature_is_valid_hex() {
 #[test]
 fn verification_passes_with_correct_public_key() {
     let wallet = Wallet::new();
-    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
 
     let result = Wallet::verify_transaction(&tx, &wallet.public_key_hex());
@@ -71,23 +71,22 @@ fn verification_passes_with_correct_public_key() {
 #[test]
 fn verification_fails_with_wrong_public_key() {
     let signer = Wallet::new();
-    let other = Wallet::new();
+    let other  = Wallet::new();
 
-    let mut tx = Transaction::new(signer.address(), "bob", 10);
+    let mut tx = Transaction::new(signer.address(), "bob", 10, 0);
     signer.sign_transaction(&mut tx).expect("signing failed");
 
     let result = Wallet::verify_transaction(&tx, &other.public_key_hex());
-    // Either returns Ok(false) or Err — both are acceptable as "failed verification"
     match result {
         Ok(valid) => assert!(!valid),
-        Err(_) => {} // also fine
+        Err(_) => {}
     }
 }
 
 #[test]
 fn verification_fails_on_unsigned_transaction() {
     let wallet = Wallet::new();
-    let tx = Transaction::new(wallet.address(), "bob", 10);
+    let tx     = Transaction::new(wallet.address(), "bob", 10, 0);
     let result = Wallet::verify_transaction(&tx, &wallet.public_key_hex());
     assert!(result.is_err());
 }
@@ -95,10 +94,9 @@ fn verification_fails_on_unsigned_transaction() {
 #[test]
 fn tampered_transaction_fails_verification() {
     let wallet = Wallet::new();
-    let mut tx = Transaction::new(wallet.address(), "bob", 10);
+    let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
 
-    // Tamper with amount after signing
     tx.amount = 9999;
 
     let result = Wallet::verify_transaction(&tx, &wallet.public_key_hex());
@@ -110,9 +108,9 @@ fn tampered_transaction_fails_verification() {
 
 #[test]
 fn two_signatures_of_same_data_are_deterministic_or_both_valid() {
-    let wallet = Wallet::new();
-    let mut tx1 = Transaction::new(wallet.address(), "bob", 10);
-    let mut tx2 = Transaction::new(wallet.address(), "bob", 10);
+    let wallet  = Wallet::new();
+    let mut tx1 = Transaction::new(wallet.address(), "bob", 10, 0);
+    let mut tx2 = Transaction::new(wallet.address(), "bob", 10, 0);
 
     wallet.sign_transaction(&mut tx1).unwrap();
     wallet.sign_transaction(&mut tx2).unwrap();
@@ -154,8 +152,8 @@ fn loaded_wallet_can_sign_and_verify() {
     let wallet = Wallet::new();
     wallet.save_to_file(&path).unwrap();
 
-    let loaded    = Wallet::load_from_file(&path).unwrap();
-    let mut tx    = Transaction::new(loaded.address(), "carol", 25);
+    let loaded = Wallet::load_from_file(&path).unwrap();
+    let mut tx = Transaction::new(loaded.address(), "carol", 25, 0);
     loaded.sign_transaction(&mut tx).unwrap();
 
     assert!(Wallet::verify_transaction(&tx, &loaded.public_key_hex()).unwrap());
