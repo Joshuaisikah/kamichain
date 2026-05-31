@@ -1,96 +1,100 @@
-# Miner — `miner.rs`
+# miner.rs — how blocks get made
 
-## Purpose
-
-The `Miner` is the component that produces new blocks. It pulls pending transactions out of the mempool, prepends a coinbase reward transaction, runs Proof-of-Work, and then commits the result to the shared chain state — all in one atomic operation.
+the miner is pretty simple conceptually. it grabs pending transactions from the mempool, sticks a coinbase reward on the front, runs PoW until the hash looks right, then writes the block to the chain. the tricky part was getting the locking right so mining doesn't freeze the RPC and P2P layers.
 
 ---
 
-## Constants
+## constants
 
-| Constant | Value | Meaning |
-|----------|-------|---------|
-| `BLOCK_REWARD` | `50` | Amount credited to the miner's address per block (coinbase). |
-| `MAX_TXS_PER_BLOCK` | `100` | Hard cap on user transactions per block (coinbase not counted). |
+```rust
+pub const BLOCK_REWARD: u64 = 50;
+pub const MAX_TXS_PER_BLOCK: usize = 100;
+```
+
+50 coins per block, max 100 user transactions per block (the coinbase doesn't count toward that cap). picked these numbers to be bitcoin-adjacent and easy to test with. reward halving is a future problem.
 
 ---
 
-## `Miner` Struct
+## the struct
 
 ```rust
 pub struct Miner {
-    pub address: String,   // reward destination address
-    pub pow: ProofOfWork,  // encapsulates difficulty + hashing loop
+    pub address: String,
+    pub pow: ProofOfWork,
 }
 ```
 
-### `Miner::new(address, difficulty)`
-
-Constructs a miner bound to a specific reward address and difficulty level.  
-`ProofOfWork::new(difficulty)` pre-computes the zero-prefix string used during mining.
+`address` is where the block reward goes. `pow` just holds the difficulty and builds the target prefix string — it's cheap to create but I keep it in the struct so I'm not rebuilding it on every mine.
 
 ---
 
-## Methods
+## mine_block — the slow part
 
-### `mine_block(&self, state, mempool) -> Block`
+```rust
+pub fn mine_block(&self, state: &SharedState, mempool: &Mempool) -> Block {
+```
 
-Produces a valid block **without** touching the chain yet. Two-phase design:
+this is the CPU-intensive part. I deliberately separated it from the commit so I don't hold any write locks while hashing.
 
-1. **Read phase** — acquires a short read lock to snapshot `(index, prev_hash)` from the chain tip. The lock is dropped immediately so the mining loop (which can take seconds) never blocks readers.
+what it does:
+1. grabs a read lock just long enough to snapshot `(index, prev_hash)` from the chain tip, then immediately drops it
+2. calls `mempool.take(MAX_TXS_PER_BLOCK)` — returns the highest-fee transactions without removing them yet
+3. prepends a coinbase tx at position 0 so the miner always gets paid first
+4. calls `pow.mine(&mut block)` which just increments `block.nonce` in a loop until `block.hash.starts_with("00...")`
 
-2. **Assemble transactions** — calls `mempool.take(MAX_TXS_PER_BLOCK)` which returns the highest-fee transactions without removing them. A coinbase transaction is prepended at position 0 so the reward is always the first tx in the block.
-
-3. **Mine** — `Block::new(index, txs, prev_hash)` creates the block shell, then `pow.mine(&mut block)` increments the nonce until the block hash satisfies the difficulty target (correct number of leading zeros).
-
-**Why separate from commit?** Mining is slow (CPU-bound). Holding a write lock during PoW would starve the RPC and P2P layers. Separating the two phases means the chain is write-locked only for a microsecond.
+the reason I snapshot and release the read lock before mining: PoW can take seconds at difficulty 4+. holding a read lock that whole time would block anything that needs a write lock (like an incoming block from P2P). drop it early, mine freely.
 
 ---
 
-### `mine_and_commit(&self, state, mempool) -> Result<Block, KamiError>`
+## mine_and_commit — the fast part
 
-The full pipeline — mine then commit atomically:
+```rust
+pub fn mine_and_commit(
+    &self,
+    state: &SharedState,
+    mempool: &mut Mempool,
+) -> Result<Block, KamiError> {
+```
+
+this wraps `mine_block` and then commits atomically:
 
 ```
-mine_block()          ← slow, no lock held
+mine_block()        ← can take seconds, no locks held
     ↓
-state.write()         ← fast: add_block + apply_block
+state.write()       ← held for maybe a millisecond
+  chain.add_block
+  apply_block
+  drop write lock
     ↓
-mempool.remove(txs)   ← clean up confirmed transactions
+mempool.remove      ← clean up confirmed txs
 ```
 
-1. Calls `mine_block()` (can take seconds, no lock held).
-2. Acquires a single write lock and:
-   - Calls `chain.add_block(block.clone())` — validates linkage and difficulty, appends to the chain.
-   - Calls `state.apply_block(&block)` — updates the in-memory balance ledger.
-3. Removes the confirmed transactions from the mempool (including the coinbase, which is already filtered out in `mempool.add`).
+the write lock covers `add_block` and `apply_block` together on purpose — I never want a state where the chain has a new block but the balances haven't been updated yet. one lock, both mutations, drop.
 
-**Returns** the mined block so the caller (`node.rs`) can persist it and broadcast it to peers.
-
-**Error cases** — `chain.add_block` returns `KamiError` if the block is invalid (wrong index, hash mismatch, bad difficulty). In practice this only happens under a race where two miners produce blocks at the same height simultaneously.
+if `add_block` fails (wrong index, bad hash, bad PoW) it returns a `KamiError`. in practice this only happens if two miners somehow produce blocks at the same height at the same time. when it happens in tests it's because the test is deliberately feeding a bad block.
 
 ---
 
-## Data Flow in Context
+## the mempool lock situation
 
-```
-Mempool ──take(100)──► mine_block ──PoW──► Block
-                                              │
-                              ┌───────────────┘
-                              │
-                        state.write()
-                         ├─ chain.add_block
-                         └─ apply_block (update balances)
-                              │
-                         mempool.remove
-                              │
-                        return block ──► storage.save + p2p.broadcast
-```
+the caller in `node.rs` holds the mempool `Mutex` for the entire `mine_and_commit` call, which means the whole mine duration. that's not great — `tx_submit` from RPC will block while mining is happening.
+
+I know this is a problem. the proper fix is to take a snapshot of transactions before mining and lock only for the commit. but that needs deduplication logic to handle the case where the same transaction appears in two simultaneously-mined blocks. keeping it simple for now, will fix when throughput actually matters.
 
 ---
 
-## Threading Model
+## data flow
 
-`mine_and_commit` takes `&self` and `&mut Mempool`. The caller in `node.rs` holds the `mempool` `Mutex` guard for the duration of the call. This is intentional: it prevents two concurrent mining attempts from both pulling the same transactions and racing on the write lock.
-
-The downside is that the `Mutex` is held during the entire mining duration. In production you would mine outside the lock and only lock for the commit phase — but that requires deduplication logic for the case where the same transaction appears in two simultaneously-mined blocks.
+```
+mempool.take(100) ──► mine_block ──PoW──► Block
+                                            │
+                            ┌───────────────┘
+                            │
+                      state.write()
+                       ├─ chain.add_block
+                       └─ apply_block
+                            │
+                       mempool.remove (confirmed txs)
+                            │
+                      return block ──► storage.save + p2p.broadcast
+```

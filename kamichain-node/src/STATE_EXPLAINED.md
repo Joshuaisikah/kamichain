@@ -1,104 +1,97 @@
-# Node State — `state.rs`
+# state.rs — the node's in-memory truth
 
-## Purpose
-
-`NodeState` is the single source of truth for the running node. It holds the canonical chain and an in-memory balance ledger derived from that chain. Everything that needs to read or write these two things — the miner, the RPC server, the P2P layer — shares a single `Arc<RwLock<NodeState>>`.
+`NodeState` is the one place that holds both the chain and the balance ledger. everything else — miner, RPC, P2P — shares a single `Arc<RwLock<NodeState>>` and talks to it through that.
 
 ---
 
-## Types
+## why one shared struct
 
-### `SharedState`
+I could have kept the chain and balances separate, but they need to stay in sync. if I update the chain without updating balances, or vice versa, things go wrong. wrapping them in one struct behind one `RwLock` means I can update both atomically in a single write guard.
 
 ```rust
 pub type SharedState = Arc<RwLock<NodeState>>;
-```
 
-A type alias so callers don't have to spell out `Arc<RwLock<NodeState>>` everywhere. The `RwLock` allows unlimited concurrent readers (RPC `chain_info`, P2P `GetChain`) but exclusive access for writers (miner commit, P2P `NewBlock`).
-
-### `NodeState`
-
-```rust
 pub struct NodeState {
     pub chain:    Chain,
     pub balances: HashMap<String, u64>,
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `chain` | `Chain` | The ordered list of blocks, with the genesis block at index 0. |
-| `balances` | `HashMap<String, u64>` | In-memory ledger: `address → confirmed balance`. Only reflects confirmed (on-chain) transactions. |
+`SharedState` is just a type alias so I don't have to write `Arc<RwLock<NodeState>>` everywhere. the `RwLock` lets multiple readers go at the same time (RPC serving `chain_info` while P2P handles `GetChain`), but writes are exclusive.
 
 ---
 
-## Methods
+## constructors
 
-### `new(difficulty) -> NodeState`
-
-Creates a fresh node state: an empty chain (genesis block created by `Chain::new`) and an empty balance map.
-
-### `new_shared(difficulty) -> SharedState`
-
-Convenience constructor that wraps `new()` in an `Arc<RwLock<...>>`. Used in tests and can replace the ad-hoc construction in `node.rs`.
-
-### `apply_block(&mut self, block: &Block)`
-
-Updates the balance ledger for every transaction in the block:
-
-```
-TxType::Coinbase
-    balances[recipient] += amount
-    (no sender deduction — coinbase creates new coins)
-
-TxType::Transfer
-    balances[sender]    -= amount   (saturating_sub — never underflows)
-    balances[recipient] += amount
+```rust
+pub fn new(difficulty: usize) -> Self
+pub fn new_shared(difficulty: usize) -> SharedState
 ```
 
-**Why `saturating_sub`?** It prevents an unsigned integer underflow panic if a block somehow credits more than a sender has. In a correctly-validated chain this case should never arise (the chain's `is_valid` would catch it), but `saturating_sub` is a safety net for the in-memory ledger.
-
-**When to call it**: `apply_block` is called immediately after `chain.add_block` succeeds — in both `miner.mine_and_commit` and `p2p::handle_peer`. The two calls must always be paired; applying a block that was not added to the chain would desync the ledger.
-
-### `balance_of(&self, address: &str) -> u64`
-
-Looks up the confirmed balance for an address. Returns `0` for unknown addresses (no error — they simply have a zero balance).
+`new` gives you a plain `NodeState` with a genesis chain and empty balances. `new_shared` wraps it in the `Arc<RwLock<...>>` ready to pass around. I mostly use `new_shared` in tests, `new` in the binary where I build the state manually from a loaded chain.
 
 ---
 
-## Consistency Guarantees
+## apply_block
 
-The `RwLock` ensures that `chain` and `balances` are always mutated together in the same write guard. A reader that holds a read guard sees a consistent snapshot: the balance ledger always reflects exactly the transactions in the chain at the time the guard was acquired.
+this is where confirmed transactions actually move money:
+
+```rust
+pub fn apply_block(&mut self, block: &Block) {
+    for tx in &block.transactions {
+        match tx.tx_type {
+            TxType::Coinbase => {
+                *self.balances.entry(tx.recipient.clone()).or_insert(0) += tx.amount;
+            }
+            TxType::Transfer => {
+                let sender_balance = self.balances
+                    .entry(tx.sender.clone())
+                    .or_insert(0);
+                *sender_balance = sender_balance.saturating_sub(tx.amount);
+                *self.balances.entry(tx.recipient.clone()).or_insert(0) += tx.amount;
+            }
+        }
+    }
+}
+```
+
+coinbase just adds coins to the recipient — that's how new money enters the system. transfer debits the sender and credits the recipient.
+
+`saturating_sub` for the debit means if for some reason the sender's balance is lower than the transfer amount it clamps to zero instead of underflowing. the mempool already checks `amount + fee <= balance` before admitting transactions, so this shouldn't happen on a clean chain. but bugs happen and I'd rather clamp than panic.
+
+**important**: `apply_block` must always be called right after `chain.add_block` succeeds, and never called on a block that wasn't added. the miner does this, the P2P layer does this. if you ever call one without the other the chain and balances go out of sync and you'll have a bad time.
+
+---
+
+## balance_of
+
+```rust
+pub fn balance_of(&self, address: &str) -> u64 {
+    *self.balances.get(address).unwrap_or(&0)
+}
+```
+
+returns 0 for any address that's never received anything. no error. this is what the RPC `wallet_balance` method and the mempool balance check both use.
+
+---
+
+## locking in practice
 
 ```
-Thread A (miner)        Thread B (RPC)
-─────────────────       ─────────────────
-state.write()           state.read()        ← blocked until A releases
-  add_block
+Thread A (miner commits a block)    Thread B (RPC serves chain_info)
+────────────────────────────────    ────────────────────────────────
+state.write()                       state.read()    ← waits
+  chain.add_block
   apply_block
-  drop guard          → unblocked, sees both updates
+  drop guard                      → gets read lock, sees consistent state
 ```
+
+the reader always sees the chain and balances at the same point in time. no partial updates.
 
 ---
 
-## Relationship to Other Components
+## what's NOT in NodeState
 
-```
-                ┌──────────────────┐
-                │   NodeState      │
-                │  chain           │◄── Chain::add_block (miner, p2p)
-                │  balances        │◄── apply_block      (miner, p2p)
-                └──────────────────┘
-                        ▲
-              Arc<RwLock<NodeState>>
-                    ┌───┴────┐
-                  Miner    RpcServer    P2PLayer
-```
-
----
-
-## What Is Not in `NodeState`
-
-- **Mempool** — pending (unconfirmed) transactions are tracked separately in `Mempool`. Keeping them separate means the mempool can be drained without holding the chain write lock.
-- **Peers** — the P2P layer owns the peer list; it does not need to be visible to the chain or balance logic.
-- **Disk persistence** — `Storage` is responsible for serialising `chain` to JSON. `NodeState` is purely in-memory.
+- **mempool** — kept separate so the miner can drain it without holding the chain write lock
+- **peer list** — that's the P2P layer's business
+- **disk** — `Storage` handles serialising the chain to JSON. `NodeState` is purely in-memory and gets rebuilt from the file on startup

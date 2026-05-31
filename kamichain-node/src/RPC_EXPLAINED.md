@@ -1,45 +1,39 @@
-# RPC Server — `rpc.rs`
+# rpc.rs — talking to the node over TCP
 
-## Purpose
-
-The RPC server exposes the node's state over a newline-delimited JSON protocol on a TCP socket. Clients (the CLI, wallets, explorers) send a single JSON request per connection and receive a single JSON response back.
-
-The design is deliberately minimal: one connection = one request/response pair. No persistent connections, no framing, no authentication.
+the RPC server is how the outside world talks to the node — CLI commands, wallets, anything that wants to query the chain or submit a transaction. I kept it extremely simple: one JSON request per TCP connection, one response back, connection closes. no persistent sessions, no framing, no auth.
 
 ---
 
-## Wire Format
+## wire format
 
-**Request** — a JSON object on a single line, terminated by `\n`:
+request — one JSON line, `\n` terminated:
 ```json
-{"method": "chain_info", "params": null}
+{"method": "chain_info"}
 {"method": "chain_block", "params": {"index": 3}}
 {"method": "tx_submit", "params": {"tx": { ...transaction fields... }}}
 {"method": "wallet_balance", "params": {"address": "alice"}}
 ```
 
-**Response** — a JSON object on a single line, terminated by `\n`:
+response — one JSON line back:
 ```json
 {"ok": true,  "result": { ... }, "error": null}
 {"ok": false, "result": null,    "error": "block 99 not found"}
 ```
 
+`ok` is always there so the client knows immediately whether to look at `result` or `error`. simple.
+
 ---
 
-## Types
-
-### `RpcRequest`
+## the types
 
 ```rust
 pub struct RpcRequest {
     pub method: String,
-    pub params: Option<Value>,  // serde_json::Value — any JSON shape
+    pub params: Option<Value>,
 }
 ```
 
-Method names follow `category_action` naming (e.g., `chain_info`, `tx_submit`).
-
-### `RpcResponse`
+`params` is a raw `serde_json::Value` because each method has a different shape. I just deserialise per-method instead of trying to make a generic enum for all of them.
 
 ```rust
 pub struct RpcResponse {
@@ -49,109 +43,98 @@ pub struct RpcResponse {
 }
 ```
 
-- `RpcResponse::ok(value)` — constructs a success response.
-- `RpcResponse::err(msg)` — constructs an error response.
+`RpcResponse::ok(value)` and `RpcResponse::err(msg)` are just convenience constructors. nothing fancy.
 
 ---
 
-## `RpcServer` Struct
+## RpcServer
 
 ```rust
 pub struct RpcServer {
-    listener: TcpListener,           // std listener, converted to tokio at runtime
+    listener: TcpListener,
     state:    Arc<RwLock<NodeState>>,
     mempool:  Arc<Mutex<Mempool>>,
 }
 ```
 
-Holds `Arc` handles to the shared state and mempool so each spawned connection handler can clone them cheaply.
+I bind the TCP listener synchronously in `new()` so if the port is taken we die immediately at startup with a clear error, not somewhere inside the async runtime. then `run()` converts it to a tokio listener and loops on `accept()`, spawning a task per connection.
 
-### `RpcServer::new(addr, state, mempool)`
-
-Binds a `std::net::TcpListener` synchronously (so binding errors surface at startup, not inside the async runtime). Sets `SO_NONBLOCKING` so the tokio runtime can adopt it with `TcpListener::from_std`.
-
-### `local_port() -> u16`
-
-Utility used in tests to discover the ephemeral port when bound to `:0`.
-
-### `run(self) -> anyhow::Result<!>`
-
-Converts the std listener to a tokio listener and enters an accept loop. For each incoming connection a task is spawned via `tokio::spawn` so connections are handled concurrently without blocking each other.
+`local_port()` exists just for tests — bind to `:0`, get whatever port the OS picked.
 
 ---
 
-## `handle` (private async fn)
+## one connection, one message
 
-Called once per connection. Reads exactly one line from the socket, parses it as `RpcRequest`, dispatches to `dispatch`, serialises the response, and writes it back. The connection is then dropped.
+each accepted connection gets `handle()` which reads exactly one line, dispatches it, writes the response, and drops the connection. I went with this instead of persistent connections because:
 
-**Why read only one line?** Simplicity. A blockchain node RPC doesn't need persistent sessions. Each CLI command opens a fresh TCP connection.
+- blockchain CLI tools fire a command and exit anyway
+- framing (knowing when a message ends) is a whole problem I didn't want to solve
+- stateless connections mean no cleanup on disconnect
 
 ---
 
-## `dispatch` (private fn)
+## what each method does
 
-Pattern-matches on `req.method` and delegates to the appropriate handler. All handlers hold locks for the minimum time required.
+| method | locks | what it does |
+|--------|-------|-------------|
+| `chain_info` | read | height, latest hash, difficulty |
+| `chain_block` | read | full block JSON by index |
+| `tx_submit` | read then mempool lock | balance check + add to mempool |
+| `wallet_balance` | read | confirmed balance for an address |
+| `node_peers` | none | returns `[]` — not implemented yet |
+| anything else | none | error |
 
-| Method | Locks held | What it does |
-|--------|-----------|--------------|
-| `chain_info` | `RwLock::read` | Returns chain height, latest hash, difficulty |
-| `chain_block` | `RwLock::read` | Returns the serialised block at the given index |
-| `tx_submit` | `RwLock::read` then `Mutex::lock` | Reads sender balance from state, validates, calls `mempool.add` |
-| `wallet_balance` | `RwLock::read` | Looks up address in the balance ledger |
-| `node_peers` | none | Placeholder — returns empty peer list |
-| anything else | none | Returns `"unknown method"` error |
-
-### `chain_info`
+### chain_info
 
 ```json
 {"method": "chain_info"}
 → {"ok": true, "result": {"height": 5, "latest_hash": "0000abc...", "difficulty": 2}}
 ```
 
-### `chain_block`
+### chain_block
 
 ```json
 {"method": "chain_block", "params": {"index": 0}}
 → {"ok": true, "result": { ...full Block JSON... }}
 ```
 
-Returns an error if `index` is out of range.
+out of range index gives a proper error, not a panic.
 
-### `tx_submit`
+### tx_submit
 
 ```json
 {"method": "tx_submit", "params": {"tx": {"id":"...", "tx_type":"Transfer", ...}}}
 → {"ok": true, "result": {"submitted": true}}
 ```
 
-The handler reads the sender's confirmed on-chain balance from `NodeState` before touching the mempool:
+this one does two things before hitting the mempool. first reads the sender's confirmed balance from state:
 
 ```rust
 let sender_balance = state.read().unwrap().balance_of(&tx.sender);
 mempool.lock().unwrap().add(tx, sender_balance)
 ```
 
-`mempool.add` then checks in order: not coinbase, sender ≠ recipient, amount > 0, valid signature, `amount + fee <= sender_balance`, no duplicate, mempool not full. A wallet with zero on-chain balance will be rejected with `"insufficient balance"`.
+then `mempool.add` runs through: not coinbase, sender ≠ recipient, amount > 0, valid signature, `amount + fee <= balance`, not a duplicate, pool not full. any failure comes back as `{"ok": false, "error": "..."}`.
 
-### `wallet_balance`
+a fresh wallet with no on-chain balance gets rejected with `"insufficient balance"` — which is correct. you need coins before you can spend them.
+
+### wallet_balance
 
 ```json
 {"method": "wallet_balance", "params": {"address": "alice"}}
 → {"ok": true, "result": {"balance": 150}}
 ```
 
-Returns 0 for unknown addresses (not an error — the address just has no confirmed transactions yet).
+returns 0 for addresses that have never received anything. not an error.
 
 ---
 
-## Error Handling
+## locking
 
-All failures return `{"ok": false, "error": "..."}` rather than closing the connection abruptly. The only hard errors are I/O failures in `handle`, which are logged to stderr via `eprintln!`.
+I take the state read lock just long enough to get the balance (or chain info), then drop it before touching the mempool. I never hold both locks simultaneously. that's important because the miner holds the mempool lock for the entire mining duration — if the RPC server tried to grab both, we'd deadlock.
 
 ---
 
-## Security Notes
+## a note on security
 
-- No authentication. The RPC port should only be bound to `127.0.0.1` in production or protected by a firewall.
-- Transaction signatures are validated in `mempool.add` via `Wallet::verify_transaction` — the RPC layer trusts the mempool's verdict.
-- JSON is deserialized with `serde_json` — no `eval`, no shell injection surface.
+no auth, no TLS. you should only run this on localhost or behind a firewall. signature verification happens inside `mempool.add`, so the RPC layer itself doesn't need to know about keys — the mempool handles it.

@@ -1,128 +1,101 @@
-# P2P Layer — `p2p.rs`
+# p2p.rs — talking to other nodes
 
-## Purpose
-
-The P2P layer lets KamiChain nodes discover each other, propagate new blocks and transactions, and synchronise their chains. It uses raw TCP with newline-delimited JSON messages — no external networking library, no DHT, no gossip protocol. The design is a minimal flood network: when a node receives a block it accepts it; when it mines a block it broadcasts to all known peers.
+the P2P layer handles everything node-to-node: broadcasting new blocks and transactions, syncing the chain when connecting to a peer. I went with raw TCP and newline-delimited JSON — no libp2p, no DHT, no gossip protocol. just open a socket, send a JSON line, optionally read one back.
 
 ---
 
-## Message Protocol
+## the message format
 
-All messages are a single line of JSON terminated by `\n`. The envelope uses a tagged union (`serde`'s `tag + content`):
+all messages are a single JSON line terminated by `\n`. I used `serde`'s adjacently-tagged enum so every message has a `"type"` and optional `"data"`:
 
 ```rust
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum Message {
-    NewBlock(Block),        // propagate a mined block
-    GetChain,               // ask a peer for its full chain
-    Chain(Vec<Block>),      // respond with the full chain
-    NewTx(Transaction),     // propagate a mempool transaction
-    GetPeers,               // ask for known peers
-    Peers(Vec<String>),     // respond with peer addresses
+    NewBlock(Block),
+    GetChain,
+    Chain(Vec<Block>),
+    NewTx(Transaction),
+    GetPeers,
+    Peers(Vec<String>),
 }
 ```
 
-On the wire these look like:
+on the wire:
 ```json
-{"type": "new_block", "data": { ...Block fields... }}
+{"type": "new_block",  "data": { ...block... }}
 {"type": "get_chain"}
-{"type": "chain",    "data": [ ...blocks... ]}
+{"type": "chain",      "data": [ ...blocks... ]}
+{"type": "new_tx",     "data": { ...tx... }}
 ```
 
 ---
 
-## `P2PLayer` Struct
+## P2PLayer struct
 
 ```rust
 pub struct P2PLayer {
-    listener: TcpListener,               // accept incoming connections
-    peers:    Arc<Mutex<Vec<String>>>,   // known peer addresses
+    listener: TcpListener,
+    peers:    Arc<Mutex<Vec<String>>>,
     state:    Arc<RwLock<NodeState>>,
     mempool:  Arc<Mutex<Mempool>>,
 }
 ```
 
-`peers` is a flat list of `"host:port"` strings. There is no peer scoring, no eviction, and no maximum peer count — this is intentional simplicity for a learning/prototype node.
+`peers` is just a `Vec<String>` of `"host:port"` addresses. no scoring, no eviction, no cap. it's a prototype — the peer list grows but never shrinks. good enough for now.
 
 ---
 
-## Methods
+## methods
 
-### `new(addr, state, mempool)`
+### `new`
+binds the TCP listener synchronously, same as the RPC server. fail fast if the port is taken.
 
-Binds a `std::net::TcpListener` synchronously (same reasoning as the RPC server — fail fast at startup). The peer list starts empty; peers are added via `connect()` or could be extended later via `GetPeers`.
+### `listen`
+converts the std listener to a tokio listener, loops on accept, spawns `handle_peer` per connection. each spawned task gets `Arc` clones of state, mempool, peers.
 
-### `listen_addr() -> String`
+### `connect`
+dials an outbound connection to a known peer address, adds it to the peer list, spawns `handle_peer` on the stream. called at startup if `--peer` was passed.
 
-Returns the actual bound address (useful when bound to port 0 in tests).
+### `broadcast_block`
+opens a fresh TCP connection to every known peer and sends `NewBlock`. each peer is fire-and-forget — if one fails it logs nothing and moves on. a single unreachable peer shouldn't stop the block from reaching the rest.
 
-### `peers() -> Vec<String>`
+I open a new connection per broadcast instead of keeping persistent ones. persistent connections mean I have to track health, reconnect on drop, etc. a new connection per message is a bit wasteful but the code stays dead simple.
 
-Snapshot of the current peer list.
+### `broadcast_tx`
+same as `broadcast_block` but sends `NewTx`. called when the RPC receives a transaction and wants to propagate it.
 
-### `listen(&self) -> anyhow::Result<!>`
+### `sync_with_peer`
+used once at startup after `connect`. sends `GetChain`, reads back the `Chain` response, and calls `chain.replace(blocks)` to adopt the peer's chain if it's longer and valid. if sync fails the node just starts with its local chain and catches up from incoming blocks.
 
-Accept loop — converts the std listener to tokio, then spawns a task per incoming connection calling `handle_peer`. The spawned tasks share `Arc` clones of `state`, `mempool`, and `peers`.
-
-### `connect(&self, peer_addr) -> anyhow::Result<()>`
-
-Dials an outbound connection to a known peer, adds it to the peer list, and spawns `handle_peer` on the resulting stream. The spawned handler will process the first message the remote sends (or wait for one). This method is called at startup when `--peer` is provided.
-
-### `broadcast_block(&self, block)`
-
-Opens a fresh TCP connection to each known peer and sends a `NewBlock` message. Fires-and-forgets per peer — errors are silently swallowed because a single unreachable peer should not stop propagation to the rest.
-
-**Why a new connection per broadcast?** Persistent connections require connection-lifecycle management (health checks, reconnection). A new connection per message is slower but keeps the code simple and stateless.
-
-### `broadcast_tx(&self, tx)`
-
-Same as `broadcast_block` but wraps the transaction in `NewTx`. Called when the node receives a transaction over RPC and wants to forward it to peers.
-
-### `sync_with_peer(&self, addr) -> anyhow::Result<()>`
-
-Bootstrap sync — used once at startup. Opens a connection to `addr`, sends `GetChain`, reads the `Chain` response, and calls `chain.replace(blocks)` to overwrite the local chain with the peer's chain.
-
-**Security note**: this blindly trusts the peer's chain. A production node would verify the received chain (re-validate every block, check total work) before replacing the local one.
+one thing to note here — I blindly trust the chain I get back. no cryptographic verification that it actually came from who I think it did. this is fine for a local dev network but would be a problem in the wild.
 
 ---
 
-## `handle_peer` (private async fn)
+## handle_peer — what happens when a message arrives
 
-Called for every accepted or outbound connection. Reads one line from the stream, parses it as a `Message`, and handles it:
+one message per connection. read a line, parse it, handle it, done:
 
-| Message received | Action |
-|------------------|--------|
-| `NewBlock(block)` | Write-lock state, call `chain.add_block`. If the block is valid, also call `apply_block` to update balances. If invalid (block is behind, wrong hash), the error is swallowed — a future enhancement would send `GetChain` to catch up. |
-| `GetChain` | Read-lock state, clone all blocks, send `Chain(blocks)` response. |
-| `NewTx(tx)` | Read-lock state to get sender's on-chain balance, then lock mempool and call `mempool.add(tx, sender_balance)`. Transactions with insufficient balance or bad signatures are silently dropped. |
-| `GetPeers` | Send `Peers([])` — peer exchange is not yet implemented. |
-| anything else | Ignored (`_` arm). |
-
-**One message per connection**: Like the RPC server, each TCP connection handles exactly one message. This avoids stream-framing complexity at the cost of connection overhead.
+| message | what I do |
+|---------|-----------|
+| `NewBlock` | write-lock state, try `chain.add_block`, if it passes call `apply_block` to update balances. if it fails (block behind or bad hash) I just swallow the error — the node will eventually catch up |
+| `GetChain` | read-lock state, clone the blocks, send `Chain(blocks)` back |
+| `NewTx` | read state to get sender's on-chain balance, then `mempool.add(tx, sender_balance)`. bad txs are silently dropped |
+| `GetPeers` | send back `Peers([])` — peer exchange is not built yet |
+| anything else | ignored |
 
 ---
 
-## Threading Model
+## the one-message-per-connection thing
 
-The P2P layer is entirely async (tokio). Shared state is accessed through the same `Arc<RwLock<NodeState>>` and `Arc<Mutex<Mempool>>` used by the miner and RPC server. Lock contention is minimised by holding locks only for the mutation itself.
+this keeps the code simple. no framing, no partial reads, no "what if the message is split across two reads". you open a connection, you send one thing, you optionally get one thing back, you close. same approach as the RPC server.
 
-```
-P2P listen loop
-    ├─ tokio::spawn handle_peer (connection A)
-    │       └─ state.write() for ~1µs on NewBlock
-    ├─ tokio::spawn handle_peer (connection B)
-    │       └─ state.read() for ~1µs on GetChain
-    └─ ...
-```
+the downside is connection overhead per broadcast. fine for 2-10 peers, would need rethinking beyond that.
 
 ---
 
-## Known Limitations / Future Work
+## known rough edges
 
-| Gap | Notes |
-|-----|-------|
-| No chain validation on sync | `replace()` trusts the peer blindly |
-| No peer discovery | `GetPeers` returns an empty list |
-| No reconnect | If a peer drops, it is never removed from the list |
-| New TCP connection per broadcast | Fine for <100 peers, expensive beyond |
-| No message size limit | A malicious peer could send an unbounded line |
+- `replace()` trusts whatever chain the peer sends — no total-work comparison
+- `GetPeers` returns an empty list, so nodes can't discover each other automatically — you have to pass `--peer` manually
+- dead peers stay in the list forever and cause silent failures on every broadcast
+- no maximum message size — a malicious peer could send a huge line and OOM the node
