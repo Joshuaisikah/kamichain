@@ -1,7 +1,7 @@
-use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 use crate::block::Block;
 use crate::error::KamiError;
+use rayon::prelude::*;
+use sha2::{Digest, Sha256};
 
 const CHUNK: u64 = 100_000;
 
@@ -19,11 +19,11 @@ impl ProofOfWork {
     }
 
     pub fn mine(&self, block: &mut Block) {
-        let target    = self.target_prefix();
-        let index     = block.index;
+        let target = self.target_prefix();
+        let index = block.index;
         let timestamp = block.timestamp;
-        let merkle    = block.merkle_root.clone();
-        let prev      = block.prev_hash.clone();
+        let merkle = block.merkle_root.clone();
+        let prev = block.prev_hash.clone();
 
         let nonce = (0u64..)
             .step_by(CHUNK as usize)
@@ -31,14 +31,13 @@ impl ProofOfWork {
                 (start..start.saturating_add(CHUNK))
                     .into_par_iter()
                     .find_any(|&n| {
-                        hash_candidate(index, timestamp, &merkle, &prev, n)
-                            .starts_with(&target)
+                        hash_candidate(index, timestamp, &merkle, &prev, n).starts_with(&target)
                     })
             })
             .expect("nonce space exhausted");
 
         block.nonce = nonce;
-        block.hash  = block.compute_hash();
+        block.hash = block.compute_hash();
     }
 
     pub fn validate(&self, block: &Block) -> Result<(), KamiError> {

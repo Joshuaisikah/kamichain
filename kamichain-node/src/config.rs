@@ -2,23 +2,23 @@ use crate::error::NodeError;
 
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
-    pub bind_addr:  String,
-    pub rpc_addr:   String,
+    pub bind_addr: String,
+    pub rpc_addr: String,
     pub difficulty: usize,
-    pub data_dir:   String,
+    pub data_dir: String,
     pub miner_addr: String,
-    pub peer:       Option<String>,
+    pub peer: Option<String>,
 }
 
 impl Default for NodeConfig {
     fn default() -> Self {
         NodeConfig {
-            bind_addr:   "127.0.0.1:8333".to_string(),
-            rpc_addr:    "127.0.0.1:8332".to_string(),
-            difficulty:  2,
-            data_dir:    "./data".to_string(),
-            miner_addr:  "default_miner".to_string(),
-            peer:        None,
+            bind_addr: "127.0.0.1:8333".to_string(),
+            rpc_addr: "127.0.0.1:8332".to_string(),
+            difficulty: 2,
+            data_dir: "./data".to_string(),
+            miner_addr: "default_miner".to_string(),
+            peer: None,
         }
     }
 }
@@ -46,9 +46,9 @@ impl NodeConfig {
                 }
                 "--difficulty" => {
                     let raw = next_value(args, i, "--difficulty")?;
-                    cfg.difficulty = raw.parse().map_err(|_| {
-                        NodeError::Config(format!("invalid difficulty: {}", raw))
-                    })?;
+                    cfg.difficulty = raw
+                        .parse()
+                        .map_err(|_| NodeError::Config(format!("invalid difficulty: {}", raw)))?;
                     i += 2;
                 }
                 "--data-dir" => {
@@ -78,7 +78,9 @@ impl NodeConfig {
             return Err(NodeError::Config("difficulty must be >= 1".to_string()));
         }
         if self.miner_addr.is_empty() {
-            return Err(NodeError::Config("miner address must not be empty".to_string()));
+            return Err(NodeError::Config(
+                "miner address must not be empty".to_string(),
+            ));
         }
         Ok(())
     }
@@ -116,20 +118,27 @@ mod tests {
     #[test]
     fn parses_all_flags() {
         let cfg = NodeConfig::from_slice(&args(&[
-            "--bind", "0.0.0.0:9000",
-            "--rpc",  "0.0.0.0:9001",
-            "--difficulty", "4",
-            "--data-dir", "/tmp/kami",
-            "--miner", "alice",
-            "--peer", "192.168.1.2:8333",
-        ])).unwrap();
+            "--bind",
+            "0.0.0.0:9000",
+            "--rpc",
+            "0.0.0.0:9001",
+            "--difficulty",
+            "4",
+            "--data-dir",
+            "/tmp/kami",
+            "--miner",
+            "alice",
+            "--peer",
+            "192.168.1.2:8333",
+        ]))
+        .unwrap();
 
-        assert_eq!(cfg.bind_addr,  "0.0.0.0:9000");
-        assert_eq!(cfg.rpc_addr,   "0.0.0.0:9001");
+        assert_eq!(cfg.bind_addr, "0.0.0.0:9000");
+        assert_eq!(cfg.rpc_addr, "0.0.0.0:9001");
         assert_eq!(cfg.difficulty, 4);
-        assert_eq!(cfg.data_dir,   "/tmp/kami");
+        assert_eq!(cfg.data_dir, "/tmp/kami");
         assert_eq!(cfg.miner_addr, "alice");
-        assert_eq!(cfg.peer,       Some("192.168.1.2:8333".to_string()));
+        assert_eq!(cfg.peer, Some("192.168.1.2:8333".to_string()));
     }
 
     #[test]

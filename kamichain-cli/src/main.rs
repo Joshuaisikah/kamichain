@@ -7,7 +7,7 @@ use commands::{chain, node, tx, wallet};
 
 #[derive(Parser)]
 #[command(
-    name  = "kami",
+    name = "kami",
     about = "KamiChain CLI — talk to a running node or start one",
     version
 )]
@@ -33,8 +33,8 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Cmd::Wallet(args) => wallet::run(args).await,
-        Cmd::Tx(args)     => tx::run(args).await,
-        Cmd::Chain(args)  => chain::run(args).await,
-        Cmd::Node(args)   => node::run(args).await,
+        Cmd::Tx(args) => tx::run(args).await,
+        Cmd::Chain(args) => chain::run(args).await,
+        Cmd::Node(args) => node::run(args).await,
     }
 }

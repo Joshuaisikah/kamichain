@@ -14,7 +14,7 @@ pub async fn call(addr: &str, method: &str, params: Value) -> Result<Value> {
     line.push('\n');
     writer.write_all(line.as_bytes()).await?;
 
-    let mut reader   = BufReader::new(reader);
+    let mut reader = BufReader::new(reader);
     let mut response = String::new();
     reader.read_line(&mut response).await?;
 

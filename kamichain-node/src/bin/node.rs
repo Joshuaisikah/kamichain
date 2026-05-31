@@ -63,21 +63,20 @@ async fn main() {
     println!("Mining started...");
 
     loop {
-        let mut mempool_guard = mempool.lock().unwrap();
-        match miner.mine_and_commit(&state, &mut mempool_guard) {
+        let result = {
+            let mut pool = mempool.lock().unwrap();
+            miner.mine_and_commit(&state, &mut pool)
+        };
+        match result {
             Ok(block) => {
-                drop(mempool_guard);
                 println!("Mined block {} — hash: {}", block.index, &block.hash[..8]);
-
                 let chain = state.read().unwrap().chain.clone();
                 if let Err(e) = storage.save_chain(&chain) {
                     eprintln!("Failed to save chain: {}", e);
                 }
-
                 p2p.broadcast_block(&block).await;
             }
             Err(e) => {
-                drop(mempool_guard);
                 eprintln!("Mining error: {}", e);
             }
         }

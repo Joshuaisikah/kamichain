@@ -1,8 +1,8 @@
+use crate::rpc;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use kamichain_core::Transaction;
 use kamichain_wallet::Wallet;
-use crate::rpc;
 
 #[derive(Args)]
 pub struct TxArgs {
@@ -40,9 +40,15 @@ pub enum TxCmd {
 
 pub async fn run(args: TxArgs) -> Result<()> {
     match args.command {
-        TxCmd::Send { keyfile, to, amount, fee, node } => {
-            let wallet  = Wallet::load_from_file(&keyfile)?;
-            let mut tx  = Transaction::new(wallet.address(), &to, amount, fee);
+        TxCmd::Send {
+            keyfile,
+            to,
+            amount,
+            fee,
+            node,
+        } => {
+            let wallet = Wallet::load_from_file(&keyfile)?;
+            let mut tx = Transaction::new(wallet.address(), &to, amount, fee);
             wallet.sign_transaction(&mut tx)?;
 
             let tx_id = tx.id.clone();
@@ -51,11 +57,7 @@ pub async fn run(args: TxArgs) -> Result<()> {
         }
 
         TxCmd::Get { id, node } => {
-            let result = rpc::call(
-                &node,
-                "tx_get",
-                serde_json::json!({ "id": id }),
-            ).await?;
+            let result = rpc::call(&node, "tx_get", serde_json::json!({ "id": id })).await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
     }

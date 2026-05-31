@@ -2,9 +2,9 @@ use kamichain_core::{Block, ProofOfWork, Transaction};
 use kamichain_node::state::NodeState;
 
 fn mined_block(state: &NodeState, txs: Vec<Transaction>) -> Block {
-    let pow       = ProofOfWork::new(state.chain.difficulty);
+    let pow = ProofOfWork::new(state.chain.difficulty);
     let prev_hash = state.chain.latest_block().hash.clone();
-    let index     = state.chain.len() as u64;
+    let index = state.chain.len() as u64;
     let mut block = Block::new(index, txs, prev_hash);
     pow.mine(&mut block);
     block

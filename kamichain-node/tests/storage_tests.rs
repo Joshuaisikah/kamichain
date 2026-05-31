@@ -8,13 +8,16 @@ fn tmp_path() -> PathBuf {
 
 fn rand_suffix() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos() as u64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .subsec_nanos() as u64
 }
 
 fn mine_block(chain: &Chain) -> Block {
-    let pow  = ProofOfWork::new(chain.difficulty);
+    let pow = ProofOfWork::new(chain.difficulty);
     let prev = chain.latest_block().hash.clone();
-    let idx  = chain.len() as u64;
+    let idx = chain.len() as u64;
     let mut b = Block::new(idx, vec![], prev);
     pow.mine(&mut b);
     b
@@ -22,9 +25,9 @@ fn mine_block(chain: &Chain) -> Block {
 
 #[test]
 fn save_and_load_roundtrips_genesis_chain() {
-    let path    = tmp_path();
+    let path = tmp_path();
     let storage = Storage::new(&path);
-    let chain   = Chain::new(2);
+    let chain = Chain::new(2);
 
     storage.save_chain(&chain).unwrap();
     let loaded = storage.load_chain().unwrap();
@@ -37,7 +40,7 @@ fn save_and_load_roundtrips_genesis_chain() {
 
 #[test]
 fn save_and_load_roundtrips_multi_block_chain() {
-    let path    = tmp_path();
+    let path = tmp_path();
     let storage = Storage::new(&path);
     let mut chain = Chain::new(2);
 
@@ -62,7 +65,7 @@ fn load_returns_error_when_file_missing() {
 
 #[test]
 fn save_overwrites_previous_file() {
-    let path    = tmp_path();
+    let path = tmp_path();
     let storage = Storage::new(&path);
 
     let chain_a = Chain::new(2);
@@ -80,7 +83,7 @@ fn save_overwrites_previous_file() {
 
 #[test]
 fn loaded_chain_passes_validation() {
-    let path    = tmp_path();
+    let path = tmp_path();
     let storage = Storage::new(&path);
     let mut chain = Chain::new(2);
     chain.add_block(mine_block(&chain)).unwrap();

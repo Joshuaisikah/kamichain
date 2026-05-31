@@ -1,3 +1,4 @@
+use kamichain_node::mempool::Mempool;
 /// RPC integration tests.
 ///
 /// Each test starts an RpcServer bound to 127.0.0.1:0 (OS picks a free port),
@@ -7,29 +8,29 @@
 /// Request format:  { "method": "<name>", "params": { ... } }
 /// Response format: { "ok": true,  "result": { ... } }
 ///               or { "ok": false, "error": "<message>" }
-
 use kamichain_node::rpc::RpcServer;
 use kamichain_node::state::NodeState;
-use kamichain_node::mempool::Mempool;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
 async fn start_server() -> (RpcServer, u16, Arc<RwLock<NodeState>>) {
-    let state   = Arc::new(RwLock::new(NodeState::new(2)));
+    let state = Arc::new(RwLock::new(NodeState::new(2)));
     let mempool = Arc::new(Mutex::new(Mempool::new(1000)));
-    let server  = RpcServer::new("127.0.0.1:0", Arc::clone(&state), mempool);
-    let port    = server.local_port();
+    let server = RpcServer::new("127.0.0.1:0", Arc::clone(&state), mempool);
+    let port = server.local_port();
     (server, port, state)
 }
 
 async fn send(port: u16, request: serde_json::Value) -> serde_json::Value {
-    let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port)).await.unwrap();
-    let mut line   = serde_json::to_string(&request).unwrap();
+    let mut stream = TcpStream::connect(format!("127.0.0.1:{}", port))
+        .await
+        .unwrap();
+    let mut line = serde_json::to_string(&request).unwrap();
     line.push('\n');
     stream.write_all(line.as_bytes()).await.unwrap();
 
-    let mut reader   = BufReader::new(stream);
+    let mut reader = BufReader::new(stream);
     let mut response = String::new();
     reader.read_line(&mut response).await.unwrap();
     serde_json::from_str(&response).unwrap()
@@ -52,7 +53,11 @@ async fn chain_block_returns_genesis_at_index_zero() {
     let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
-    let resp = send(port, serde_json::json!({ "method": "chain_block", "params": { "index": 0 } })).await;
+    let resp = send(
+        port,
+        serde_json::json!({ "method": "chain_block", "params": { "index": 0 } }),
+    )
+    .await;
     assert_eq!(resp["ok"], true);
     assert_eq!(resp["result"]["index"], 0);
 }
@@ -62,7 +67,11 @@ async fn chain_block_returns_error_for_missing_index() {
     let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
-    let resp = send(port, serde_json::json!({ "method": "chain_block", "params": { "index": 999 } })).await;
+    let resp = send(
+        port,
+        serde_json::json!({ "method": "chain_block", "params": { "index": 999 } }),
+    )
+    .await;
     assert_eq!(resp["ok"], false);
     assert!(resp["error"].as_str().is_some());
 }
@@ -72,7 +81,11 @@ async fn wallet_balance_returns_zero_for_unknown_address() {
     let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
-    let resp = send(port, serde_json::json!({ "method": "wallet_balance", "params": { "address": "unknown" } })).await;
+    let resp = send(
+        port,
+        serde_json::json!({ "method": "wallet_balance", "params": { "address": "unknown" } }),
+    )
+    .await;
     assert_eq!(resp["ok"], true);
     assert_eq!(resp["result"]["balance"], 0);
 }
@@ -84,12 +97,20 @@ async fn tx_submit_adds_to_mempool() {
 
     let wallet = kamichain_wallet::Wallet::new();
     // Pre-fund the wallet so the balance check passes.
-    state.write().unwrap().balances.insert(wallet.address(), 1000);
+    state
+        .write()
+        .unwrap()
+        .balances
+        .insert(wallet.address(), 1000);
 
     let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).unwrap();
 
-    let resp = send(port, serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } })).await;
+    let resp = send(
+        port,
+        serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } }),
+    )
+    .await;
     assert_eq!(resp["ok"], true);
 }
 
@@ -103,9 +124,16 @@ async fn tx_submit_rejected_when_balance_insufficient() {
     let mut tx = kamichain_core::Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).unwrap();
 
-    let resp = send(port, serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } })).await;
+    let resp = send(
+        port,
+        serde_json::json!({ "method": "tx_submit", "params": { "tx": tx } }),
+    )
+    .await;
     assert_eq!(resp["ok"], false);
-    assert!(resp["error"].as_str().unwrap().contains("insufficient balance"));
+    assert!(resp["error"]
+        .as_str()
+        .unwrap()
+        .contains("insufficient balance"));
 }
 
 #[tokio::test]
@@ -143,10 +171,14 @@ async fn tx_get_returns_error_for_unknown_id() {
     let (server, port, _) = start_server().await;
     tokio::spawn(async move { server.run().await.unwrap() });
 
-    let resp = send(port, serde_json::json!({
-        "method": "tx_get",
-        "params": { "id": "0000000000000000000000000000000000000000000000000000000000000000" }
-    })).await;
+    let resp = send(
+        port,
+        serde_json::json!({
+            "method": "tx_get",
+            "params": { "id": "0000000000000000000000000000000000000000000000000000000000000000" }
+        }),
+    )
+    .await;
     assert_eq!(resp["ok"], false);
     assert!(resp["error"].as_str().unwrap().contains("not found"));
 }
@@ -161,18 +193,30 @@ async fn tx_get_returns_coinbase_from_mined_block() {
 
     // mine a block so the chain has a coinbase transaction
     let mempool = Arc::new(Mutex::new(Mempool::new(100)));
-    let miner   = Miner::new("miner_addr", 2);
-    miner.mine_and_commit(&state, &mut mempool.lock().unwrap()).unwrap();
+    let miner = Miner::new("miner_addr", 2);
+    miner
+        .mine_and_commit(&state, &mut mempool.lock().unwrap())
+        .unwrap();
 
     // grab the coinbase tx id from the mined block
-    let coinbase_id = state.read().unwrap()
-        .chain.get_block(1).unwrap()
-        .transactions[0].id.clone();
+    let coinbase_id = state
+        .read()
+        .unwrap()
+        .chain
+        .get_block(1)
+        .unwrap()
+        .transactions[0]
+        .id
+        .clone();
 
-    let resp = send(port, serde_json::json!({
-        "method": "tx_get",
-        "params": { "id": coinbase_id }
-    })).await;
+    let resp = send(
+        port,
+        serde_json::json!({
+            "method": "tx_get",
+            "params": { "id": coinbase_id }
+        }),
+    )
+    .await;
     assert_eq!(resp["ok"], true);
     assert_eq!(resp["result"]["recipient"], "miner_addr");
 }

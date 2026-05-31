@@ -3,7 +3,7 @@ use kamichain_core::merkle::MerkleTree;
 #[test]
 fn single_transaction_merkle_root_is_its_own_hash() {
     let hashes = vec!["abc123".to_string()];
-    let tree   = MerkleTree::new(hashes);
+    let tree = MerkleTree::new(hashes);
     assert!(!tree.root().is_empty());
 }
 
@@ -17,8 +17,8 @@ fn empty_tree_has_defined_root() {
 #[test]
 fn two_identical_transactions_produce_consistent_root() {
     let hashes = vec!["aaa".to_string(), "aaa".to_string()];
-    let tree   = MerkleTree::new(hashes.clone());
-    let tree2  = MerkleTree::new(hashes);
+    let tree = MerkleTree::new(hashes.clone());
+    let tree2 = MerkleTree::new(hashes);
     assert_eq!(tree.root(), tree2.root());
 }
 
@@ -61,13 +61,13 @@ fn large_transaction_set_produces_root() {
 #[test]
 fn verify_inclusion_returns_true_for_member() {
     let hashes = vec!["tx1".to_string(), "tx2".to_string(), "tx3".to_string()];
-    let tree   = MerkleTree::new(hashes);
+    let tree = MerkleTree::new(hashes);
     assert!(tree.verify("tx2"));
 }
 
 #[test]
 fn verify_inclusion_returns_false_for_non_member() {
     let hashes = vec!["tx1".to_string(), "tx2".to_string()];
-    let tree   = MerkleTree::new(hashes);
+    let tree = MerkleTree::new(hashes);
     assert!(!tree.verify("tx_not_in_tree"));
 }

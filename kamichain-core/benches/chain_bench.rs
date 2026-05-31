@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use kamichain_core::{Block, Chain, ProofOfWork};
 use kamichain_core::merkle::MerkleTree;
+use kamichain_core::{Block, Chain, ProofOfWork};
 
 fn bench_block_hashing(c: &mut Criterion) {
     let block = Block::genesis();

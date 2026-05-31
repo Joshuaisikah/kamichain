@@ -13,20 +13,20 @@ fn make_state(difficulty: usize) -> Arc<RwLock<NodeState>> {
 
 #[test]
 fn mined_block_satisfies_pow() {
-    let state   = make_state(2);
+    let state = make_state(2);
     let mempool = Mempool::new(100);
-    let miner   = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     let block = miner.mine_block(&state, &mempool);
-    let pow   = ProofOfWork::new(2);
+    let pow = ProofOfWork::new(2);
     assert!(pow.validate(&block).is_ok(), "hash: {}", block.hash);
 }
 
 #[test]
 fn mined_block_includes_coinbase_transaction() {
-    let state   = make_state(2);
+    let state = make_state(2);
     let mempool = Mempool::new(100);
-    let miner   = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     let block = miner.mine_block(&state, &mempool);
     assert!(!block.transactions.is_empty());
@@ -35,9 +35,9 @@ fn mined_block_includes_coinbase_transaction() {
 
 #[test]
 fn coinbase_reward_goes_to_miner_address() {
-    let state   = make_state(2);
+    let state = make_state(2);
     let mempool = Mempool::new(100);
-    let miner   = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     let block = miner.mine_block(&state, &mempool);
     assert_eq!(block.transactions[0].recipient, "miner_address");
@@ -46,20 +46,20 @@ fn coinbase_reward_goes_to_miner_address() {
 
 #[test]
 fn mined_block_links_to_latest_chain_block() {
-    let state   = make_state(2);
+    let state = make_state(2);
     let mempool = Mempool::new(100);
-    let miner   = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     let latest_hash = state.read().unwrap().chain.latest_block().hash.clone();
-    let block       = miner.mine_block(&state, &mempool);
+    let block = miner.mine_block(&state, &mempool);
     assert_eq!(block.prev_hash, latest_hash);
 }
 
 #[test]
 fn mine_and_commit_adds_block_to_chain() {
-    let state       = make_state(2);
+    let state = make_state(2);
     let mut mempool = Mempool::new(100);
-    let miner       = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     let len_before = state.read().unwrap().chain.len();
     miner.mine_and_commit(&state, &mut mempool).unwrap();
@@ -70,11 +70,11 @@ fn mine_and_commit_adds_block_to_chain() {
 
 #[test]
 fn mine_and_commit_includes_mempool_transactions() {
-    let state       = make_state(2);
+    let state = make_state(2);
     let mut mempool = Mempool::new(100);
 
-    let wallet  = Wallet::new();
-    let mut tx1 = Transaction::new(wallet.address(), "bob",   5, 0);
+    let wallet = Wallet::new();
+    let mut tx1 = Transaction::new(wallet.address(), "bob", 5, 0);
     let mut tx2 = Transaction::new(wallet.address(), "carol", 3, 0);
     wallet.sign_transaction(&mut tx1).unwrap();
     wallet.sign_transaction(&mut tx2).unwrap();
@@ -90,7 +90,7 @@ fn mine_and_commit_includes_mempool_transactions() {
 
 #[test]
 fn mine_and_commit_removes_included_txs_from_mempool() {
-    let state       = make_state(2);
+    let state = make_state(2);
     let mut mempool = Mempool::new(100);
 
     let wallet = Wallet::new();
@@ -106,9 +106,9 @@ fn mine_and_commit_removes_included_txs_from_mempool() {
 
 #[test]
 fn miner_balance_increases_after_mining() {
-    let state       = make_state(2);
+    let state = make_state(2);
     let mut mempool = Mempool::new(100);
-    let miner       = Miner::new("miner_address", 2);
+    let miner = Miner::new("miner_address", 2);
 
     miner.mine_and_commit(&state, &mut mempool).unwrap();
 

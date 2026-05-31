@@ -29,7 +29,11 @@ fn two_wallets_have_different_addresses() {
 fn address_is_valid_hex() {
     let wallet = Wallet::new();
     let addr = wallet.address();
-    assert!(addr.chars().all(|c| c.is_ascii_hexdigit()), "address: {}", addr);
+    assert!(
+        addr.chars().all(|c| c.is_ascii_hexdigit()),
+        "address: {}",
+        addr
+    );
 }
 
 #[test]
@@ -45,7 +49,10 @@ fn sign_transaction_sets_pub_key() {
     let wallet = Wallet::new();
     let mut tx = Transaction::new(wallet.address(), "bob", 10, 0);
     wallet.sign_transaction(&mut tx).expect("signing failed");
-    assert_eq!(tx.pub_key.as_deref(), Some(wallet.public_key_hex().as_str()));
+    assert_eq!(
+        tx.pub_key.as_deref(),
+        Some(wallet.public_key_hex().as_str())
+    );
 }
 
 #[test]
@@ -71,7 +78,7 @@ fn verification_passes_with_correct_public_key() {
 #[test]
 fn verification_fails_with_wrong_public_key() {
     let signer = Wallet::new();
-    let other  = Wallet::new();
+    let other = Wallet::new();
 
     let mut tx = Transaction::new(signer.address(), "bob", 10, 0);
     signer.sign_transaction(&mut tx).expect("signing failed");
@@ -86,7 +93,7 @@ fn verification_fails_with_wrong_public_key() {
 #[test]
 fn verification_fails_on_unsigned_transaction() {
     let wallet = Wallet::new();
-    let tx     = Transaction::new(wallet.address(), "bob", 10, 0);
+    let tx = Transaction::new(wallet.address(), "bob", 10, 0);
     let result = Wallet::verify_transaction(&tx, &wallet.public_key_hex());
     assert!(result.is_err());
 }
@@ -108,7 +115,7 @@ fn tampered_transaction_fails_verification() {
 
 #[test]
 fn two_signatures_of_same_data_are_deterministic_or_both_valid() {
-    let wallet  = Wallet::new();
+    let wallet = Wallet::new();
     let mut tx1 = Transaction::new(wallet.address(), "bob", 10, 0);
     let mut tx2 = Transaction::new(wallet.address(), "bob", 10, 0);
 
@@ -123,9 +130,9 @@ fn two_signatures_of_same_data_are_deterministic_or_both_valid() {
 
 #[test]
 fn save_and_load_keyfile_restores_same_address() {
-    let path   = tmp_keyfile();
+    let path = tmp_keyfile();
     let wallet = Wallet::new();
-    let addr   = wallet.address();
+    let addr = wallet.address();
 
     wallet.save_to_file(&path).unwrap();
     let loaded = Wallet::load_from_file(&path).unwrap();
@@ -136,7 +143,7 @@ fn save_and_load_keyfile_restores_same_address() {
 
 #[test]
 fn save_and_load_keyfile_restores_same_public_key() {
-    let path   = tmp_keyfile();
+    let path = tmp_keyfile();
     let wallet = Wallet::new();
 
     wallet.save_to_file(&path).unwrap();
@@ -148,7 +155,7 @@ fn save_and_load_keyfile_restores_same_public_key() {
 
 #[test]
 fn loaded_wallet_can_sign_and_verify() {
-    let path   = tmp_keyfile();
+    let path = tmp_keyfile();
     let wallet = Wallet::new();
     wallet.save_to_file(&path).unwrap();
 

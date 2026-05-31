@@ -1,11 +1,11 @@
+use crate::mempool::Mempool;
+use crate::state::NodeState;
+use kamichain_core::Transaction;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use kamichain_core::Transaction;
-use crate::mempool::Mempool;
-use crate::state::NodeState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct RpcRequest {
@@ -22,11 +22,19 @@ pub struct RpcResponse {
 
 impl RpcResponse {
     fn ok(result: Value) -> Self {
-        RpcResponse { ok: true, result: Some(result), error: None }
+        RpcResponse {
+            ok: true,
+            result: Some(result),
+            error: None,
+        }
     }
 
     fn err(msg: impl Into<String>) -> Self {
-        RpcResponse { ok: false, result: None, error: Some(msg.into()) }
+        RpcResponse {
+            ok: false,
+            result: None,
+            error: Some(msg.into()),
+        }
     }
 }
 
@@ -37,14 +45,14 @@ pub struct RpcServer {
 }
 
 impl RpcServer {
-    pub fn new(
-        addr: &str,
-        state: Arc<RwLock<NodeState>>,
-        mempool: Arc<Mutex<Mempool>>,
-    ) -> Self {
+    pub fn new(addr: &str, state: Arc<RwLock<NodeState>>, mempool: Arc<Mutex<Mempool>>) -> Self {
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
-        RpcServer { listener, state, mempool }
+        RpcServer {
+            listener,
+            state,
+            mempool,
+        }
     }
 
     pub fn local_port(&self) -> u16 {
@@ -107,7 +115,8 @@ fn dispatch(
         }
 
         "chain_block" => {
-            let index = req.params
+            let index = req
+                .params
                 .as_ref()
                 .and_then(|p| p["index"].as_u64())
                 .unwrap_or(0);
@@ -119,7 +128,8 @@ fn dispatch(
         }
 
         "tx_submit" => {
-            let tx: Transaction = match req.params
+            let tx: Transaction = match req
+                .params
                 .as_ref()
                 .and_then(|p| p.get("tx"))
                 .and_then(|t| serde_json::from_value(t.clone()).ok())
@@ -135,7 +145,8 @@ fn dispatch(
         }
 
         "wallet_balance" => {
-            let address = req.params
+            let address = req
+                .params
                 .as_ref()
                 .and_then(|p| p["address"].as_str())
                 .unwrap_or("");
@@ -160,12 +171,16 @@ fn dispatch(
         }
 
         "tx_get" => {
-            let id = req.params
+            let id = req
+                .params
                 .as_ref()
                 .and_then(|p| p["id"].as_str())
                 .unwrap_or("");
             let s = state.read().unwrap();
-            let found = s.chain.blocks.iter()
+            let found = s
+                .chain
+                .blocks
+                .iter()
                 .flat_map(|b| b.transactions.iter())
                 .find(|tx| tx.id == id);
             match found {
@@ -174,9 +189,7 @@ fn dispatch(
             }
         }
 
-        "node_peers" => {
-            RpcResponse::ok(serde_json::json!({ "peers": [] }))
-        }
+        "node_peers" => RpcResponse::ok(serde_json::json!({ "peers": [] })),
 
         _ => RpcResponse::err("unknown method"),
     }

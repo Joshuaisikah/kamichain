@@ -111,21 +111,30 @@ fn take_does_not_remove_transactions_from_pool() {
 fn transfer_with_zero_amount_is_rejected() {
     let mut pool = Mempool::new(100);
     let tx = Transaction::new("alice", "bob", 0, 0);
-    assert!(pool.add(tx, ENOUGH).is_err(), "zero-amount transfer should be rejected");
+    assert!(
+        pool.add(tx, ENOUGH).is_err(),
+        "zero-amount transfer should be rejected"
+    );
 }
 
 #[test]
 fn coinbase_transaction_is_not_admitted_to_mempool() {
     let mut pool = Mempool::new(100);
     let tx = Transaction::coinbase("miner", 50);
-    assert!(pool.add(tx, ENOUGH).is_err(), "coinbase should not be user-submittable");
+    assert!(
+        pool.add(tx, ENOUGH).is_err(),
+        "coinbase should not be user-submittable"
+    );
 }
 
 #[test]
 fn transaction_with_sender_equal_to_recipient_is_rejected() {
     let mut pool = Mempool::new(100);
     let tx = Transaction::new("alice", "alice", 10, 0);
-    assert!(pool.add(tx, ENOUGH).is_err(), "self-transfer should be rejected");
+    assert!(
+        pool.add(tx, ENOUGH).is_err(),
+        "self-transfer should be rejected"
+    );
 }
 
 // ── Signature verification ────────────────────────────────────
@@ -134,7 +143,10 @@ fn transaction_with_sender_equal_to_recipient_is_rejected() {
 fn unsigned_transfer_is_rejected() {
     let mut pool = Mempool::new(100);
     let tx = Transaction::new("alice_addr", "bob_addr", 10, 0);
-    assert!(pool.add(tx, ENOUGH).is_err(), "unsigned transfer must be rejected");
+    assert!(
+        pool.add(tx, ENOUGH).is_err(),
+        "unsigned transfer must be rejected"
+    );
 }
 
 #[test]
@@ -148,12 +160,15 @@ fn signed_transfer_is_accepted() {
 
 #[test]
 fn transfer_signed_by_wrong_key_is_rejected() {
-    let mut pool  = Mempool::new(100);
-    let wallet_a  = Wallet::new();
-    let wallet_b  = Wallet::new();
+    let mut pool = Mempool::new(100);
+    let wallet_a = Wallet::new();
+    let wallet_b = Wallet::new();
     let mut tx = Transaction::new(wallet_a.address(), "bob_addr", 10, 0);
     wallet_b.sign_transaction(&mut tx).unwrap();
-    assert!(pool.add(tx, ENOUGH).is_err(), "mismatched pub_key/sender must be rejected");
+    assert!(
+        pool.add(tx, ENOUGH).is_err(),
+        "mismatched pub_key/sender must be rejected"
+    );
 }
 
 // ── Balance validation ────────────────────────────────────────
@@ -164,7 +179,10 @@ fn transaction_rejected_when_amount_exceeds_balance() {
     let wallet = Wallet::new();
     let mut tx = Transaction::new(wallet.address(), "bob", 100, 0);
     wallet.sign_transaction(&mut tx).unwrap();
-    assert!(pool.add(tx, 50).is_err(), "amount > balance must be rejected");
+    assert!(
+        pool.add(tx, 50).is_err(),
+        "amount > balance must be rejected"
+    );
 }
 
 #[test]
@@ -174,7 +192,10 @@ fn transaction_rejected_when_fee_pushes_total_over_balance() {
     let mut tx = Transaction::new(wallet.address(), "bob", 80, 30);
     wallet.sign_transaction(&mut tx).unwrap();
     // amount(80) + fee(30) = 110 > balance(100)
-    assert!(pool.add(tx, 100).is_err(), "amount + fee > balance must be rejected");
+    assert!(
+        pool.add(tx, 100).is_err(),
+        "amount + fee > balance must be rejected"
+    );
 }
 
 #[test]
@@ -184,7 +205,10 @@ fn transaction_accepted_when_amount_plus_fee_equals_balance() {
     let mut tx = Transaction::new(wallet.address(), "bob", 70, 30);
     wallet.sign_transaction(&mut tx).unwrap();
     // amount(70) + fee(30) = 100 == balance(100)
-    assert!(pool.add(tx, 100).is_ok(), "exact balance should be accepted");
+    assert!(
+        pool.add(tx, 100).is_ok(),
+        "exact balance should be accepted"
+    );
 }
 
 // ── Fee priority ──────────────────────────────────────────────
@@ -205,21 +229,21 @@ fn transaction_fee_is_set_at_construction() {
 fn take_returns_highest_fee_transactions_first() {
     let mut pool = Mempool::new(100);
 
-    let wallet_low  = Wallet::new();
+    let wallet_low = Wallet::new();
     let wallet_high = Wallet::new();
-    let wallet_mid  = Wallet::new();
+    let wallet_mid = Wallet::new();
 
-    let mut tx_low  = Transaction::new(wallet_low.address(),  "r", 1, 1);
+    let mut tx_low = Transaction::new(wallet_low.address(), "r", 1, 1);
     let mut tx_high = Transaction::new(wallet_high.address(), "r", 2, 10);
-    let mut tx_mid  = Transaction::new(wallet_mid.address(),  "r", 3, 5);
+    let mut tx_mid = Transaction::new(wallet_mid.address(), "r", 3, 5);
 
     wallet_low.sign_transaction(&mut tx_low).unwrap();
     wallet_high.sign_transaction(&mut tx_high).unwrap();
     wallet_mid.sign_transaction(&mut tx_mid).unwrap();
 
-    pool.add(tx_low,  ENOUGH).unwrap();
+    pool.add(tx_low, ENOUGH).unwrap();
     pool.add(tx_high, ENOUGH).unwrap();
-    pool.add(tx_mid,  ENOUGH).unwrap();
+    pool.add(tx_mid, ENOUGH).unwrap();
 
     let taken = pool.take(3);
     assert_eq!(taken[0].fee, 10);
@@ -239,7 +263,7 @@ fn take_selects_highest_fee_when_pool_exceeds_max() {
         pool.add(tx, ENOUGH).unwrap();
     }
 
-    let taken      = pool.take(3);
+    let taken = pool.take(3);
     let taken_fees: Vec<u64> = taken.iter().map(|t| t.fee).collect();
     assert_eq!(taken_fees, vec![10, 8, 3]);
 }

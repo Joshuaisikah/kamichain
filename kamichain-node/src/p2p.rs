@@ -1,10 +1,10 @@
+use crate::mempool::Mempool;
+use crate::state::NodeState;
+use kamichain_core::{Block, Transaction};
+use serde::{Deserialize, Serialize};
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use serde::{Deserialize, Serialize};
-use kamichain_core::{Block, Transaction};
-use crate::mempool::Mempool;
-use crate::state::NodeState;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
@@ -25,11 +25,7 @@ pub struct P2PLayer {
 }
 
 impl P2PLayer {
-    pub fn new(
-        addr: &str,
-        state: Arc<RwLock<NodeState>>,
-        mempool: Arc<Mutex<Mempool>>,
-    ) -> Self {
+    pub fn new(addr: &str, state: Arc<RwLock<NodeState>>, mempool: Arc<Mutex<Mempool>>) -> Self {
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
         P2PLayer {
@@ -49,9 +45,7 @@ impl P2PLayer {
     }
 
     pub async fn listen(&self) -> anyhow::Result<()> {
-        let listener = tokio::net::TcpListener::from_std(
-            self.listener.try_clone()?
-        )?;
+        let listener = tokio::net::TcpListener::from_std(self.listener.try_clone()?)?;
 
         loop {
             let (stream, _) = listener.accept().await?;

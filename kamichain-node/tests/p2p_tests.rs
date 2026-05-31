@@ -11,7 +11,6 @@
 ///   { "type": "new_tx",     "data": <Tx JSON>      }
 ///   { "type": "get_peers"                          }
 ///   { "type": "peers",      "data": [...]          }
-
 use kamichain_core::{Block, Transaction};
 use kamichain_node::mempool::Mempool;
 use kamichain_node::p2p::{Message, P2PLayer};
@@ -25,8 +24,8 @@ fn make_state(difficulty: usize) -> Arc<RwLock<NodeState>> {
 #[tokio::test]
 async fn message_new_block_roundtrips_json() {
     let block = Block::genesis();
-    let msg   = Message::NewBlock(block.clone());
-    let json  = serde_json::to_string(&msg).unwrap();
+    let msg = Message::NewBlock(block.clone());
+    let json = serde_json::to_string(&msg).unwrap();
     let back: Message = serde_json::from_str(&json).unwrap();
     if let Message::NewBlock(b) = back {
         assert_eq!(b.hash, block.hash);
@@ -37,7 +36,7 @@ async fn message_new_block_roundtrips_json() {
 
 #[tokio::test]
 async fn message_new_tx_roundtrips_json() {
-    let tx  = Transaction::new("alice", "bob", 42, 0);
+    let tx = Transaction::new("alice", "bob", 42, 0);
     let msg = Message::NewTx(tx.clone());
     let json = serde_json::to_string(&msg).unwrap();
     let back: Message = serde_json::from_str(&json).unwrap();
@@ -50,10 +49,10 @@ async fn message_new_tx_roundtrips_json() {
 
 #[tokio::test]
 async fn two_nodes_can_connect() {
-    let state_a  = make_state(2);
-    let state_b  = make_state(2);
-    let pool_a   = Arc::new(Mutex::new(Mempool::new(100)));
-    let pool_b   = Arc::new(Mutex::new(Mempool::new(100)));
+    let state_a = make_state(2);
+    let state_b = make_state(2);
+    let pool_a = Arc::new(Mutex::new(Mempool::new(100)));
+    let pool_b = Arc::new(Mutex::new(Mempool::new(100)));
 
     let node_a = P2PLayer::new("127.0.0.1:0", state_a, pool_a);
     let node_b = P2PLayer::new("127.0.0.1:0", state_b, pool_b);
@@ -69,8 +68,8 @@ async fn two_nodes_can_connect() {
 async fn broadcast_block_reaches_connected_peer() {
     let state_a = make_state(2);
     let state_b = make_state(2);
-    let pool_a  = Arc::new(Mutex::new(Mempool::new(100)));
-    let pool_b  = Arc::new(Mutex::new(Mempool::new(100)));
+    let pool_a = Arc::new(Mutex::new(Mempool::new(100)));
+    let pool_b = Arc::new(Mutex::new(Mempool::new(100)));
 
     let node_a = P2PLayer::new("127.0.0.1:0", Arc::clone(&state_a), Arc::clone(&pool_a));
     let node_b = P2PLayer::new("127.0.0.1:0", Arc::clone(&state_b), Arc::clone(&pool_b));
@@ -81,8 +80,8 @@ async fn broadcast_block_reaches_connected_peer() {
 
     // mine a block and broadcast it
     let genesis_hash = state_a.read().unwrap().chain.latest_block().hash.clone();
-    let mut block    = Block::new(1, vec![], genesis_hash);
-    let pow          = kamichain_core::ProofOfWork::new(2);
+    let mut block = Block::new(1, vec![], genesis_hash);
+    let pow = kamichain_core::ProofOfWork::new(2);
     pow.mine(&mut block);
 
     node_b.broadcast_block(&block).await;
@@ -98,14 +97,14 @@ async fn broadcast_block_reaches_connected_peer() {
 async fn sync_replaces_shorter_chain() {
     let state_a = make_state(2);
     let state_b = make_state(2);
-    let pool_a  = Arc::new(Mutex::new(Mempool::new(100)));
-    let pool_b  = Arc::new(Mutex::new(Mempool::new(100)));
+    let pool_a = Arc::new(Mutex::new(Mempool::new(100)));
+    let pool_b = Arc::new(Mutex::new(Mempool::new(100)));
 
     // Give node_b a longer chain (3 blocks)
     {
         use kamichain_node::miner::Miner;
         let mut pool = pool_b.lock().unwrap();
-        let miner    = Miner::new("miner", 2);
+        let miner = Miner::new("miner", 2);
         miner.mine_and_commit(&state_b, &mut pool).unwrap();
         miner.mine_and_commit(&state_b, &mut pool).unwrap();
     }
@@ -124,9 +123,9 @@ async fn sync_replaces_shorter_chain() {
 
 #[tokio::test]
 async fn get_peers_returns_connected_addresses() {
-    let state   = make_state(2);
-    let pool    = Arc::new(Mutex::new(Mempool::new(100)));
-    let node    = P2PLayer::new("127.0.0.1:0", state, pool);
+    let state = make_state(2);
+    let pool = Arc::new(Mutex::new(Mempool::new(100)));
+    let node = P2PLayer::new("127.0.0.1:0", state, pool);
 
     let peers = node.peers();
     assert!(peers.is_empty());

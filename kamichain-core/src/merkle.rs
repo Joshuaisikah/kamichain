@@ -4,14 +4,17 @@ pub struct MerkleTree {
     leaves: Vec<String>,
     root: String,
 }
-impl MerkleTree{
-    pub fn new(hashes: Vec<String>)->Self{
-    if hashes.is_empty() {
-        let root = hash_str("");
-        return MerkleTree { leaves: vec![], root }
-    }
+impl MerkleTree {
+    pub fn new(hashes: Vec<String>) -> Self {
+        if hashes.is_empty() {
+            let root = hash_str("");
+            return MerkleTree {
+                leaves: vec![],
+                root,
+            };
+        }
         let leaves = hashes.clone();
-        let mut level= hashes.iter().map(|h| hash_str(h)).collect::<Vec<_>>();
+        let mut level = hashes.iter().map(|h| hash_str(h)).collect::<Vec<_>>();
         while level.len() > 1 {
             let mut next_level = Vec::new();
             let mut i = 0;
@@ -28,23 +31,23 @@ impl MerkleTree{
             level = next_level;
         }
         MerkleTree {
-                leaves,
-                root:level[0].clone(),
-            }
+            leaves,
+            root: level[0].clone(),
         }
-    pub fn root(&self)->String{
+    }
+    pub fn root(&self) -> String {
         self.root.clone()
     }
-    pub fn verify(&self,tx_hash:&str)->bool{
+    pub fn verify(&self, tx_hash: &str) -> bool {
         self.leaves.contains(&tx_hash.to_string())
     }
 }
-fn hash_str(s: &str) -> String{
+fn hash_str(s: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(s.as_bytes());
     format!("{:x}", hasher.finalize())
 }
-fn hash_pair(left: &str, right: &str)->String{
+fn hash_pair(left: &str, right: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(left.as_bytes());
     hasher.update(right.as_bytes());

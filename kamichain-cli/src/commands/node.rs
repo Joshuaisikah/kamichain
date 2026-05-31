@@ -41,7 +41,14 @@ pub enum NodeCmd {
 }
 
 pub async fn run(args: NodeArgs) -> Result<()> {
-    let NodeCmd::Start { bind, rpc, difficulty, data_dir, miner: miner_addr, peer } = args.command;
+    let NodeCmd::Start {
+        bind,
+        rpc,
+        difficulty,
+        data_dir,
+        miner: miner_addr,
+        peer,
+    } = args.command;
 
     println!("KamiChain Node");
     println!("  bind:       {}", bind);
@@ -53,12 +60,15 @@ pub async fn run(args: NodeArgs) -> Result<()> {
     std::fs::create_dir_all(&data_dir)?;
 
     let storage = Storage::new(format!("{}/chain.json", data_dir));
-    let chain   = storage.load_chain().unwrap_or_else(|_| {
+    let chain = storage.load_chain().unwrap_or_else(|_| {
         println!("No existing chain — starting fresh");
         kamichain_core::Chain::new(difficulty)
     });
 
-    let state   = Arc::new(RwLock::new(NodeState { chain, balances: HashMap::new() }));
+    let state = Arc::new(RwLock::new(NodeState {
+        chain,
+        balances: HashMap::new(),
+    }));
     let mempool = Arc::new(Mutex::new(Mempool::new(10_000)));
 
     let rpc_server = RpcServer::new(&rpc, Arc::clone(&state), Arc::clone(&mempool));
@@ -76,7 +86,7 @@ pub async fn run(args: NodeArgs) -> Result<()> {
         });
     }
 
-    let p2p          = Arc::new(p2p);
+    let p2p = Arc::new(p2p);
     let p2p_listener = Arc::clone(&p2p);
     tokio::spawn(async move { p2p_listener.listen().await.unwrap() });
 
@@ -84,10 +94,12 @@ pub async fn run(args: NodeArgs) -> Result<()> {
     println!("Mining started...");
 
     loop {
-        let mut pool = mempool.lock().unwrap();
-        match miner.mine_and_commit(&state, &mut pool) {
+        let result = {
+            let mut pool = mempool.lock().unwrap();
+            miner.mine_and_commit(&state, &mut pool)
+        };
+        match result {
             Ok(block) => {
-                drop(pool);
                 println!("Mined block {} — hash: {}", block.index, &block.hash[..8]);
                 let chain = state.read().unwrap().chain.clone();
                 if let Err(e) = storage.save_chain(&chain) {
@@ -96,7 +108,6 @@ pub async fn run(args: NodeArgs) -> Result<()> {
                 p2p.broadcast_block(&block).await;
             }
             Err(e) => {
-                drop(pool);
                 eprintln!("Mining error: {}", e);
             }
         }

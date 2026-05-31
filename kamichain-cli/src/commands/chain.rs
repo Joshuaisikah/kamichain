@@ -1,6 +1,6 @@
+use crate::rpc;
 use anyhow::Result;
 use clap::{Args, Subcommand};
-use crate::rpc;
 
 #[derive(Args)]
 pub struct ChainArgs {
@@ -39,18 +39,15 @@ pub async fn run(args: ChainArgs) -> Result<()> {
         }
 
         ChainCmd::Block { index, node } => {
-            let result = rpc::call(
-                &node,
-                "chain_block",
-                serde_json::json!({ "index": index }),
-            ).await?;
+            let result =
+                rpc::call(&node, "chain_block", serde_json::json!({ "index": index })).await?;
             println!("{}", serde_json::to_string_pretty(&result)?);
         }
 
         ChainCmd::Validate { node } => {
             let result = rpc::call(&node, "chain_validate", serde_json::Value::Null).await?;
             let valid = result["valid"].as_bool().unwrap_or(false);
-            let msg   = result["message"].as_str().unwrap_or("");
+            let msg = result["message"].as_str().unwrap_or("");
             if valid {
                 println!("✓ {}", msg);
             } else {

@@ -10,25 +10,25 @@ pub enum TxType {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Transaction {
-    pub id:        String,
-    pub tx_type:   TxType,
-    pub sender:    String,
+    pub id: String,
+    pub tx_type: TxType,
+    pub sender: String,
     pub recipient: String,
-    pub amount:    u64,
-    pub fee:       u64,
-    pub nonce:     u64,
-    pub pub_key:   Option<String>,
+    pub amount: u64,
+    pub fee: u64,
+    pub nonce: u64,
+    pub pub_key: Option<String>,
     pub signature: Option<String>,
 }
 
 impl Transaction {
     pub fn new(
-        sender:    impl Into<String>,
+        sender: impl Into<String>,
         recipient: impl Into<String>,
-        amount:    u64,
-        fee:       u64,
+        amount: u64,
+        fee: u64,
     ) -> Self {
-        let sender    = sender.into();
+        let sender = sender.into();
         let recipient = recipient.into();
         let nonce: u64 = random();
         let id = compute_id(&sender, &recipient, amount, nonce);
@@ -40,7 +40,7 @@ impl Transaction {
             amount,
             fee,
             nonce,
-            pub_key:   None,
+            pub_key: None,
             signature: None,
         }
     }
@@ -49,13 +49,13 @@ impl Transaction {
         let id = compute_id("", recipient, reward, 0);
         Transaction {
             id,
-            tx_type:   TxType::Coinbase,
-            sender:    "".to_string(),
+            tx_type: TxType::Coinbase,
+            sender: "".to_string(),
             recipient: recipient.to_string(),
-            amount:    reward,
-            fee:       0,
-            nonce:     0,
-            pub_key:   None,
+            amount: reward,
+            fee: 0,
+            nonce: 0,
+            pub_key: None,
             signature: None,
         }
     }

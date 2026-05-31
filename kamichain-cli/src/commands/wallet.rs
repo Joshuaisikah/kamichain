@@ -1,7 +1,7 @@
+use crate::rpc;
 use anyhow::Result;
 use clap::{Args, Subcommand};
 use kamichain_wallet::Wallet;
-use crate::rpc;
 
 #[derive(Args)]
 pub struct WalletArgs {
@@ -50,7 +50,8 @@ pub async fn run(args: WalletArgs) -> Result<()> {
                 &node,
                 "wallet_balance",
                 serde_json::json!({ "address": address }),
-            ).await?;
+            )
+            .await?;
             println!("balance : {}", result["balance"]);
         }
     }

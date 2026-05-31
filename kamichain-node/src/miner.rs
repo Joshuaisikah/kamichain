@@ -1,7 +1,7 @@
-use kamichain_core::{Block, ProofOfWork, Transaction};
-use kamichain_core::error::KamiError;
 use crate::mempool::Mempool;
 use crate::state::SharedState;
+use kamichain_core::error::KamiError;
+use kamichain_core::{Block, ProofOfWork, Transaction};
 
 pub const BLOCK_REWARD: u64 = 50;
 pub const MAX_TXS_PER_BLOCK: usize = 100;
