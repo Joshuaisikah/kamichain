@@ -3,7 +3,6 @@ use sha2::{Digest, Sha256};
 use crate::block::Block;
 use crate::error::KamiError;
 
-/// Number of nonces each thread batch searches before the outer loop advances.
 const CHUNK: u64 = 100_000;
 
 pub struct ProofOfWork {
@@ -19,13 +18,6 @@ impl ProofOfWork {
         "0".repeat(self.difficulty)
     }
 
-    /// Mine a valid nonce for `block` using all available CPU cores.
-    ///
-    /// The nonce space (u64) is split into chunks of CHUNK values.
-    /// Each chunk is searched in parallel with Rayon — `find_any` stops
-    /// all threads in the chunk the moment one finds a valid hash.
-    /// The outer loop advances to the next chunk only if the current one
-    /// yields nothing.
     pub fn mine(&self, block: &mut Block) {
         let target    = self.target_prefix();
         let index     = block.index;
@@ -60,8 +52,7 @@ impl ProofOfWork {
     }
 }
 
-/// Compute a candidate block hash for the given fields and nonce.
-/// Mirrors `Block::compute_hash` exactly — same field order, same SHA-256 call.
+// same field order as Block::compute_hash — must stay in sync
 fn hash_candidate(index: u64, timestamp: u64, merkle: &str, prev: &str, nonce: u64) -> String {
     let input = format!("{}{}{}{}{}", index, timestamp, merkle, prev, nonce);
     let mut h = Sha256::new();

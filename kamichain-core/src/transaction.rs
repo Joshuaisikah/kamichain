@@ -16,17 +16,12 @@ pub struct Transaction {
     pub recipient: String,
     pub amount:    u64,
     pub fee:       u64,
-    /// Random u64 — makes every transaction ID unique even with identical fields.
     pub nonce:     u64,
     pub pub_key:   Option<String>,
     pub signature: Option<String>,
 }
 
 impl Transaction {
-    /// Create a new transfer transaction.
-    /// `fee` is taken from the sender in addition to `amount`.
-    /// `nonce` is generated randomly so duplicate (sender, recipient, amount, fee) pairs
-    /// still produce distinct IDs.
     pub fn new(
         sender:    impl Into<String>,
         recipient: impl Into<String>,

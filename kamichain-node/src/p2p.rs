@@ -1,4 +1,3 @@
-// kamichain-node/src/p2p.rs
 use std::net::TcpListener;
 use std::sync::{Arc, Mutex, RwLock};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -111,17 +110,14 @@ impl P2PLayer {
     pub async fn sync_with_peer(&self, addr: &str) -> anyhow::Result<()> {
         let mut stream = tokio::net::TcpStream::connect(addr).await?;
 
-        // send GetChain
         let mut line = serde_json::to_string(&Message::GetChain)?;
         line.push('\n');
         stream.write_all(line.as_bytes()).await?;
 
-        // read response
         let mut reader = BufReader::new(stream);
         let mut response = String::new();
         reader.read_line(&mut response).await?;
 
-        // parse the Chain message
         let msg: Message = serde_json::from_str(&response)?;
         if let Message::Chain(blocks) = msg {
             let mut state_w = self.state.write().unwrap();

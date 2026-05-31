@@ -1,20 +1,13 @@
 use crate::error::NodeError;
 
-/// All runtime parameters for a node instance.
 #[derive(Debug, Clone)]
 pub struct NodeConfig {
-    /// TCP address the P2P layer binds to.
-    pub bind_addr: String,
-    /// TCP address the RPC server binds to.
-    pub rpc_addr: String,
-    /// Proof-of-work difficulty (leading zero bits).
+    pub bind_addr:  String,
+    pub rpc_addr:   String,
     pub difficulty: usize,
-    /// Directory where chain.json is persisted.
-    pub data_dir: String,
-    /// Reward address for mined coinbase transactions.
+    pub data_dir:   String,
     pub miner_addr: String,
-    /// Optional bootstrap peer to connect to on startup.
-    pub peer: Option<String>,
+    pub peer:       Option<String>,
 }
 
 impl Default for NodeConfig {
@@ -31,13 +24,12 @@ impl Default for NodeConfig {
 }
 
 impl NodeConfig {
-    /// Build config from `std::env::args()`.
     pub fn from_args() -> Result<Self, NodeError> {
         let args: Vec<String> = std::env::args().collect();
         Self::from_slice(&args)
     }
 
-    /// Build config from an arbitrary args slice (testable).
+    // takes a slice so tests can pass args without touching process::args
     pub fn from_slice(args: &[String]) -> Result<Self, NodeError> {
         let mut cfg = NodeConfig::default();
 

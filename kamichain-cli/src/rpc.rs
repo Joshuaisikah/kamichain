@@ -3,8 +3,6 @@ use serde_json::Value;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 
-/// Send one JSON-RPC request to the node and return the `result` field.
-/// Returns `Err` if the connection fails or the node responds with `ok: false`.
 pub async fn call(addr: &str, method: &str, params: Value) -> Result<Value> {
     let stream = TcpStream::connect(addr).await?;
     let (reader, mut writer) = stream.into_split();

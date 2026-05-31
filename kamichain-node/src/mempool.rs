@@ -13,12 +13,6 @@ impl Mempool {
         Mempool { pending: HashMap::new(), capacity }
     }
 
-    /// Add a transaction to the mempool.
-    ///
-    /// `sender_balance` is the sender's current confirmed on-chain balance.
-    /// The check is per-transaction — multiple pending transactions from the
-    /// same sender each check against the same on-chain balance; preventing
-    /// combined overdraft is the responsibility of the miner.
     pub fn add(&mut self, tx: Transaction, sender_balance: u64) -> Result<(), KamiError> {
         if tx.is_coinbase() {
             return Err(KamiError::InvalidTransaction(
