@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 kamichain-core   = { path = "../kamichain-core" }
 kamichain-wallet = { path = "../kamichain-wallet" }
+kamichain-node   = { path = "../kamichain-node" }
 serde_json.workspace = true
 clap.workspace       = true
 anyhow.workspace     = true

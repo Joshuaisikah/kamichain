@@ -147,6 +147,35 @@ fn dispatch(
             }))
         }
 
+        "chain_validate" => {
+            let s = state.read().unwrap();
+            match s.chain.is_valid() {
+                Ok(()) => RpcResponse::ok(serde_json::json!({
+                    "valid": true,
+                    "message": "chain is valid"
+                })),
+                Err(e) => RpcResponse::ok(serde_json::json!({
+                    "valid": false,
+                    "message": e.to_string()
+                })),
+            }
+        }
+
+        "tx_get" => {
+            let id = req.params
+                .as_ref()
+                .and_then(|p| p["id"].as_str())
+                .unwrap_or("");
+            let s = state.read().unwrap();
+            let found = s.chain.blocks.iter()
+                .flat_map(|b| b.transactions.iter())
+                .find(|tx| tx.id == id);
+            match found {
+                Some(tx) => RpcResponse::ok(serde_json::to_value(tx).unwrap()),
+                None => RpcResponse::err(format!("transaction {} not found", id)),
+            }
+        }
+
         "node_peers" => {
             RpcResponse::ok(serde_json::json!({ "peers": [] }))
         }

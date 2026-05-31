@@ -126,3 +126,53 @@ async fn unknown_method_returns_error() {
     let resp = send(port, serde_json::json!({ "method": "not_a_real_method" })).await;
     assert_eq!(resp["ok"], false);
 }
+
+#[tokio::test]
+async fn chain_validate_returns_valid_for_fresh_chain() {
+    let (server, port, _) = start_server().await;
+    tokio::spawn(async move { server.run().await.unwrap() });
+
+    let resp = send(port, serde_json::json!({ "method": "chain_validate" })).await;
+    assert_eq!(resp["ok"], true);
+    assert_eq!(resp["result"]["valid"], true);
+    assert!(resp["result"]["message"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn tx_get_returns_error_for_unknown_id() {
+    let (server, port, _) = start_server().await;
+    tokio::spawn(async move { server.run().await.unwrap() });
+
+    let resp = send(port, serde_json::json!({
+        "method": "tx_get",
+        "params": { "id": "0000000000000000000000000000000000000000000000000000000000000000" }
+    })).await;
+    assert_eq!(resp["ok"], false);
+    assert!(resp["error"].as_str().unwrap().contains("not found"));
+}
+
+#[tokio::test]
+async fn tx_get_returns_coinbase_from_mined_block() {
+    use kamichain_node::miner::Miner;
+    use std::sync::Mutex;
+
+    let (server, port, state) = start_server().await;
+    tokio::spawn(async move { server.run().await.unwrap() });
+
+    // mine a block so the chain has a coinbase transaction
+    let mempool = Arc::new(Mutex::new(Mempool::new(100)));
+    let miner   = Miner::new("miner_addr", 2);
+    miner.mine_and_commit(&state, &mut mempool.lock().unwrap()).unwrap();
+
+    // grab the coinbase tx id from the mined block
+    let coinbase_id = state.read().unwrap()
+        .chain.get_block(1).unwrap()
+        .transactions[0].id.clone();
+
+    let resp = send(port, serde_json::json!({
+        "method": "tx_get",
+        "params": { "id": coinbase_id }
+    })).await;
+    assert_eq!(resp["ok"], true);
+    assert_eq!(resp["result"]["recipient"], "miner_addr");
+}
