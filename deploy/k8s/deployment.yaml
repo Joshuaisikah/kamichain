@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kamichain
+  namespace: kamichain-demo
+spec:
+  replicas: 1
+  strategy:
+    # Never run two pods at once against the same data volume — two miners
+    # racing the same chain.json would corrupt it.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kamichain
+  template:
+    metadata:
+      labels:
+        app: kamichain
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      containers:
+        - name: kamichain
+          image: ghcr.io/joshuaisikah/kamichain:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: BRIDGE_PORT
+              value: "8080"
+            - name: NODE_RPC_ADDR
+              value: "127.0.0.1:8332"
+            - name: NODE_BIND_ADDR
+              value: "127.0.0.1:8333"
+            - name: NODE_DIFFICULTY
+              value: "5"
+            - name: NODE_DATA_DIR
+              value: "/data/kamichain"
+            - name: RESET_INTERVAL_HOURS
+              value: "6"
+            - name: DEMO_TX_COOLDOWN_SECS
+              value: "20"
+            - name: FRONTEND_ORIGIN
+              value: "https://joshuaisikah.github.io"
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kamichain-admin
+                  key: token
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: data
+              mountPath: /data/kamichain
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: kamichain-data

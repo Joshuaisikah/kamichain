@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kamichain-ingress
+  namespace: kamichain-demo
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: 164-68-116-82.sslip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: kamichain
+                port:
+                  number: 8080
+  tls:
+    - hosts:
+        - 164-68-116-82.sslip.io
+      secretName: kamichain-sslip-tls
