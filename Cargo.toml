@@ -5,6 +5,7 @@ members = [
     "kamichain-wallet",
     "kamichain-node",
     "kamichain-cli",
+    "kamichain-bridge",
 ]
 
 [workspace.package]
