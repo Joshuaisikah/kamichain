@@ -52,21 +52,42 @@ pub async fn status(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     .into_response()
 }
 
-pub async fn get_block(State(state): State<Arc<AppState>>, Path(index): Path<u64>) -> impl IntoResponse {
-    match rpc_client::call(&state.rpc_addr, "chain_block", Some(json!({ "index": index }))).await {
+pub async fn get_block(
+    State(state): State<Arc<AppState>>,
+    Path(index): Path<u64>,
+) -> impl IntoResponse {
+    match rpc_client::call(
+        &state.rpc_addr,
+        "chain_block",
+        Some(json!({ "index": index })),
+    )
+    .await
+    {
         Ok(v) => Json(v).into_response(),
         Err(e) => err_response(StatusCode::NOT_FOUND, e.to_string()).into_response(),
     }
 }
 
-pub async fn get_balance(State(state): State<Arc<AppState>>, Path(address): Path<String>) -> impl IntoResponse {
-    match rpc_client::call(&state.rpc_addr, "wallet_balance", Some(json!({ "address": address }))).await {
+pub async fn get_balance(
+    State(state): State<Arc<AppState>>,
+    Path(address): Path<String>,
+) -> impl IntoResponse {
+    match rpc_client::call(
+        &state.rpc_addr,
+        "wallet_balance",
+        Some(json!({ "address": address })),
+    )
+    .await
+    {
         Ok(v) => Json(v).into_response(),
         Err(e) => err_response(StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
     }
 }
 
-pub async fn get_tx(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> impl IntoResponse {
+pub async fn get_tx(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
     match rpc_client::call(&state.rpc_addr, "tx_get", Some(json!({ "id": id }))).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => err_response(StatusCode::NOT_FOUND, e.to_string()).into_response(),
@@ -137,9 +158,18 @@ pub async fn submit_demo_tx(
         .into_response();
     }
 
-    let mut tx = Transaction::new(state.wallet.address(), state.demo_recipient.clone(), AMOUNT, FEE);
+    let mut tx = Transaction::new(
+        state.wallet.address(),
+        state.demo_recipient.clone(),
+        AMOUNT,
+        FEE,
+    );
     if state.wallet.sign_transaction(&mut tx).is_err() {
-        return err_response(StatusCode::INTERNAL_SERVER_ERROR, "failed to sign transaction").into_response();
+        return err_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to sign transaction",
+        )
+        .into_response();
     }
 
     let tx_id = tx.id.clone();
@@ -157,7 +187,10 @@ pub async fn submit_demo_tx(
     }
 }
 
-pub async fn admin_reset(State(state): State<Arc<AppState>>, headers: HeaderMap) -> impl IntoResponse {
+pub async fn admin_reset(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
     let provided = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())

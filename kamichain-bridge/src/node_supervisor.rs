@@ -53,12 +53,16 @@ impl LogHub {
 /// public demo instance safely resettable.
 pub async fn run(cfg: NodeConfig, log: Arc<LogHub>, mut reset_rx: mpsc::Receiver<()>) {
     loop {
-        log.push(format!("[bridge] starting kamichain-node (difficulty={})", cfg.difficulty))
-            .await;
+        log.push(format!(
+            "[bridge] starting kamichain-node (difficulty={})",
+            cfg.difficulty
+        ))
+        .await;
 
         if let Err(e) = std::fs::remove_dir_all(&cfg.data_dir) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                log.push(format!("[bridge] warning: failed to wipe data dir: {}", e)).await;
+                log.push(format!("[bridge] warning: failed to wipe data dir: {}", e))
+                    .await;
             }
         }
 
@@ -82,7 +86,8 @@ pub async fn run(cfg: NodeConfig, log: Arc<LogHub>, mut reset_rx: mpsc::Receiver
         {
             Ok(child) => child,
             Err(e) => {
-                log.push(format!("[bridge] failed to spawn kamichain-node: {}", e)).await;
+                log.push(format!("[bridge] failed to spawn kamichain-node: {}", e))
+                    .await;
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                 continue;
             }

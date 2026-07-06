@@ -46,7 +46,10 @@ async fn main() -> anyhow::Result<()> {
 
     let admin_token = std::env::var("ADMIN_TOKEN").unwrap_or_else(|_| {
         let generated = uuid_like_token();
-        eprintln!("[bridge] ADMIN_TOKEN not set — generated one for this run: {}", generated);
+        eprintln!(
+            "[bridge] ADMIN_TOKEN not set — generated one for this run: {}",
+            generated
+        );
         generated
     });
 
@@ -97,13 +100,18 @@ async fn main() -> anyhow::Result<()> {
     // any localhost/127.0.0.1 port for local dev.
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(move |origin, _| {
-            let Ok(origin_str) = origin.to_str() else { return false };
+            let Ok(origin_str) = origin.to_str() else {
+                return false;
+            };
             origin_str == frontend_origin
                 || origin_str.starts_with("http://localhost:")
                 || origin_str.starts_with("http://127.0.0.1:")
         }))
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-        .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION]);
+        .allow_headers([
+            axum::http::header::CONTENT_TYPE,
+            axum::http::header::AUTHORIZATION,
+        ]);
 
     let app = Router::new()
         .route("/api/status", get(routes::status))
@@ -120,7 +128,11 @@ async fn main() -> anyhow::Result<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], bridge_port));
     println!("[bridge] listening on {}", addr);
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
@@ -128,5 +140,7 @@ async fn main() -> anyhow::Result<()> {
 fn uuid_like_token() -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    (0..32).map(|_| format!("{:x}", rng.gen_range(0..16))).collect()
+    (0..32)
+        .map(|_| format!("{:x}", rng.gen_range(0..16)))
+        .collect()
 }
