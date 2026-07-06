@@ -118,6 +118,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/api/block/{index}", get(routes::get_block))
         .route("/api/balance/{address}", get(routes::get_balance))
         .route("/api/tx/{id}", get(routes::get_tx))
+        .route("/api/validate", get(routes::validate_chain))
         .route("/api/log/recent", get(routes::recent_log))
         .route("/api/log/stream", get(routes::log_stream))
         .route("/api/demo-tx", post(routes::submit_demo_tx))

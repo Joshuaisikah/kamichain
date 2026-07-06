@@ -9,6 +9,7 @@ use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::Json;
 use kamichain_core::Transaction;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::{Stream, StreamExt};
@@ -84,6 +85,13 @@ pub async fn get_balance(
     }
 }
 
+pub async fn validate_chain(State(state): State<Arc<AppState>>) -> impl IntoResponse {
+    match rpc_client::call(&state.rpc_addr, "chain_validate", None).await {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => err_response(StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+
 pub async fn get_tx(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
@@ -109,14 +117,27 @@ pub async fn log_stream(
     Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
+#[derive(Deserialize, Default)]
+pub struct SubmitTxBody {
+    /// Recipient address. Defaults to a fixed sink if not provided — e.g. a
+    /// visitor's freshly generated demo wallet address.
+    to: Option<String>,
+}
+
 /// Signs and submits a small real transfer from the bridge's demo wallet
-/// (funded by real mined coinbase rewards) to a fixed sink address.
-/// Rate-limited per IP so one visitor can't flood the mempool.
+/// (funded by real mined coinbase rewards) to the given recipient, or a
+/// fixed sink address if none is given. Rate-limited per IP so one visitor
+/// can't flood the mempool.
 pub async fn submit_demo_tx(
     State(state): State<Arc<AppState>>,
     ConnectInfo(connect_info): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
+    body: Option<Json<SubmitTxBody>>,
 ) -> impl IntoResponse {
+    let recipient = body
+        .and_then(|Json(b)| b.to)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| state.demo_recipient.clone());
     let ip = client_ip(&headers, &connect_info);
 
     {
@@ -158,12 +179,7 @@ pub async fn submit_demo_tx(
         .into_response();
     }
 
-    let mut tx = Transaction::new(
-        state.wallet.address(),
-        state.demo_recipient.clone(),
-        AMOUNT,
-        FEE,
-    );
+    let mut tx = Transaction::new(state.wallet.address(), recipient.clone(), AMOUNT, FEE);
     if state.wallet.sign_transaction(&mut tx).is_err() {
         return err_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -178,7 +194,7 @@ pub async fn submit_demo_tx(
             "submitted": true,
             "txId": tx_id,
             "from": state.wallet.address(),
-            "to": state.demo_recipient,
+            "to": recipient,
             "amount": AMOUNT,
             "fee": FEE,
         }))
