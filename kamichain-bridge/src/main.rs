@@ -92,11 +92,16 @@ async fn main() -> anyhow::Result<()> {
         rate_limit_secs,
     });
 
+    // Vite auto-increments its port when the default is taken, so hardcoding
+    // one dev port keeps breaking. Allow the exact production origin, plus
+    // any localhost/127.0.0.1 port for local dev.
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::list([
-            frontend_origin.parse().unwrap(),
-            "http://localhost:5173".parse().unwrap(),
-        ]))
+        .allow_origin(AllowOrigin::predicate(move |origin, _| {
+            let Ok(origin_str) = origin.to_str() else { return false };
+            origin_str == frontend_origin
+                || origin_str.starts_with("http://localhost:")
+                || origin_str.starts_with("http://127.0.0.1:")
+        }))
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE, axum::http::header::AUTHORIZATION]);
 
